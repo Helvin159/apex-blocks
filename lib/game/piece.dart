@@ -14,8 +14,6 @@ enum PieceFamily {
   tTetromino,
   sTetromino,
   linePentomino,
-  rect2x3,
-  bigL,
   square3,
 }
 

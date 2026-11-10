@@ -16,10 +16,21 @@ void main() {
     PieceFamily.tTetromino: (cells: 4, orientations: 4),
     PieceFamily.sTetromino: (cells: 4, orientations: 4),
     PieceFamily.linePentomino: (cells: 5, orientations: 2),
-    PieceFamily.rect2x3: (cells: 6, orientations: 2),
-    PieceFamily.bigL: (cells: 5, orientations: 4),
     PieceFamily.square3: (cells: 9, orientations: 1),
   };
+
+  test('family list matches the spec exactly', () {
+    expect(PieceFamily.values.length, 11);
+    expect(piecesByFamily.keys.toSet(), PieceFamily.values.toSet());
+  });
+
+  test('every family has a fixed color id 0-5', () {
+    expect(familyColorIds.keys.toSet(), PieceFamily.values.toSet());
+    for (final p in allPieces) {
+      expect(p.colorId, familyColorIds[p.family]);
+      expect(p.colorId, inInclusiveRange(0, 5));
+    }
+  });
 
   test('every family is covered by the expectations', () {
     expect(expected.keys.toSet(), PieceFamily.values.toSet());

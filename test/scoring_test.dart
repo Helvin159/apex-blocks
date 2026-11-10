@@ -13,11 +13,10 @@ void main() {
     expect(lineBonus(3), lineBonusBase * 9);
   });
 
-  test('combo multiplier sequence 1.0 → 1.5 → 2.0, then capped', () {
-    expect(comboMultiplier(0), 1.0);
-    expect(comboMultiplier(1), 1.5);
-    expect(comboMultiplier(2), 2.0);
-    expect(comboMultiplier(9), 2.0);
+  test('combo multiplier sequence 1.0, 1.5, 2.0, 2.5, 3.0 and no cap', () {
+    expect([for (var i = 0; i < 5; i++) comboMultiplier(i)],
+        [1.0, 1.5, 2.0, 2.5, 3.0]);
+    expect(comboMultiplier(20), 11.0);
   });
 
   test('clearPoints applies the multiplier to the bonus', () {
