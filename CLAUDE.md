@@ -118,7 +118,16 @@ Rounded squares (radius ~6 on board, ~4 small) with a vertical 3-stop gradient, 
 - Haptics: light on placement, medium on clears, a "rumble strip" pattern (several quick light pulses) on combos of 3+.
 
 ### Liveries (themes)
-**Night Race** (default, above), **Rain Race** (deep navy board, cool blue blocks), **Desert Dusk** (warm brown board, orange/sand/rose blocks). Same structure, different color tokens. Unlocks: Rain Race at 5,000 career points, Desert Dusk at 15,000 career points (named constants; starting guesses, tune after testing), or 3 rewarded ads each, or instantly with Remove Ads. Career points = the sum of final scores across all runs. Locked livery cards show progress, e.g. "3,240 / 5,000 pts · or watch 3 ads".
+**Night Race** (default, above), **Rain Race**, **Desert Dusk**. Same structure, different color tokens, all in `themes.dart`. The livery recolors Home, the game screen, the Chequered flag screen and clear effects.
+- Constant across liveries: start lights are always red `#FF2D3A` (real start lights are red); Pole purple `#9B5CFF` / `#C9A2FF`; combo/highlight yellow `#FFC22E`.
+- **Rain Race** (deep navy, cool): background `#070D18`, panels `#0E1726` / `#111B2C`, border `#23324A`, empty cell `#142036`, text `#EEF4FB`, muted `#93A4BC`, accent `#1F7FD0` (darker than the sky block so white button text stays readable). Blocks (light/base/dark), color ids 0–5: sky `#9FD8FF/#3BA4F0/#1B6AAE`, ice `#FFFFFF/#D9EAF7/#8FA9C2`, teal `#7BF0E4/#19C2B2/#0B847A`, indigo `#B8C2FF/#6E7CF2/#3F48B3`, slate `#C3CFDD/#7F93AB/#4E5F75`, violet `#D5B8FF/#A178F2/#6B44B8`.
+- **Desert Dusk** (warm brown, sunset): background `#120B08`, panels `#1C130F` / `#201612`, border `#3A2A21`, empty cell `#26190F`, text `#F7EFE8`, muted `#B9A595`, accent `#D9581A` (darker than the orange block so white button text stays readable). Blocks, color ids 0–5: orange `#FFB27A/#FF7A2E/#C24A0A`, sand `#FFE3B0/#F2C27A/#B98A44`, rose `#FF9AA8/#E8566C/#A62A3E`, cream `#FFF6E6/#EADFC8/#B3A387`, terracotta `#E88A6A/#C5573A/#8A3320`, dusk `#D6A6E8/#A35FC2/#6E3389`.
+- Unlocks: Rain Race at 5,000 career points, Desert Dusk at 15,000 career points (named constants; starting guesses, tune after testing), or 3 rewarded ads each (milestone 6), or instantly with Remove Ads (milestone 7). Career points = the sum of final scores across all runs. Unlock rules live in a pure, tested function.
+- Locked livery cards show progress, e.g. "3,240 / 5,000 pts" (the "· or watch 3 ads" part appears once ads exist). Tapping a locked card explains how to unlock it; tapping an unlocked card equips it.
+- When a run's career points cross a threshold, the Chequered flag screen shows "LIVERY UNLOCKED · RAIN RACE" with a one-tap "Equip" button.
+
+### Setup (settings sheet)
+Opened from the Home screen's SETUP button and the game's pause sheet. Rows: Sound on/off, Haptics on/off (both persisted, default on), Privacy policy (link; added with store prep), Restore Purchases (milestone 7), Licenses (Flutter's license page, with the SIL Open Font License registered for the bundled fonts), and the app version.
 
 ### General
 Respect safe areas. Portrait only. Target 60 fps on mid-range phones. Touch targets ≥ 44 px.
@@ -131,7 +140,7 @@ Respect safe areas. Portrait only. Target 60 fps on mid-range phones. Touch targ
 - Run the UMP consent flow before loading any ads. On iOS, configure the App Tracking Transparency message.
 
 ## Persistence
-Best score, career points, selected livery, livery unlock progress (rewarded ads watched per livery), sound and haptics toggles, `adsRemoved` flag, games-played counter, and first-session flag.
+Best score, career points, selected livery, livery unlock progress (rewarded ads watched per livery, from milestone 6), sound and haptics toggles, `adsRemoved` flag, games-played counter, and first-session flag.
 
 ## Post-launch backlog (do NOT build in v1)
 - Tracks: alternate boards with fictional names only (never real circuits), e.g. Harbour Night (standard 8×8), Hairpin (L-shaped board), Chicane (fixed blocked cells), Long Straight (9×7), Rain Run (random blocked cells). Each needs its own best score. First update candidate if day-30 data shows players leaving from sameness.
