@@ -7,6 +7,8 @@ import '../game/board.dart';
 import '../game/game_state.dart';
 import '../game/piece.dart';
 import '../game/unlocks.dart';
+import '../services/ad_rules.dart';
+import '../services/ads_service.dart';
 import '../services/audio_service.dart';
 import '../services/haptics_service.dart';
 import '../services/sound_plan.dart';
@@ -182,12 +184,16 @@ class GameScreen extends StatefulWidget {
   final AudioService? audio;
   final HapticsService? haptics;
 
+  /// Rewarded Pit Stop and between-race interstitials; no ads when omitted.
+  final AdsService? ads;
+
   const GameScreen({
     super.key,
     required this.storage,
     this.newGame = GameState.new,
     this.audio,
     this.haptics,
+    this.ads,
   });
 
   @override
@@ -202,15 +208,20 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   late final AudioService _audio = widget.audio ?? AudioService.silent();
   late final HapticsService _haptics =
       widget.haptics ?? HapticsService.silent();
+  late final AdsService _ads = widget.ads ?? AdsService.disabled();
 
   /// Line-clear overlay; purely visual, never blocks input.
   late final ClearEffectsController _effects = ClearEffectsController(
     vsync: this,
   );
 
-  // Run bookkeeping. `_runRecorded` makes sure a finished run is booked once,
-  // however often the screen rebuilds.
+  // Run bookkeeping. A run is booked once, when it truly ends: leaving the
+  // Chequered flag, or a game over after the Pit Stop. `_runRecorded` keeps it
+  // to once however often the screen rebuilds.
   bool _runRecorded = false;
+  bool _pitStopUsed = false;
+  bool _pitStopBusy = false;
+  bool _leaving = false;
   late int _bestAtStart = widget.storage.bestScore;
   int _previousBest = 0;
   List<int> _newLiveries = const [];
@@ -251,6 +262,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   @override
   void initState() {
     super.initState();
+    _ads.refresh();
     _scaleCtl.addListener(() {
       final s = _session;
       if (s == null || s.returning) return;
@@ -270,6 +282,11 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
 
   @override
   void dispose() {
+    // Leaving the flag any other way (back gesture) still books the run.
+    _finishRun();
+    if (!_runRecorded) {
+      Future.microtask(() => widget.storage.setPendingRunScore(0));
+    }
     _endDrag();
     _scaleCtl.dispose();
     _returnCtl.dispose();
@@ -469,19 +486,67 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       _flashCtl.forward(from: 0);
     }
 
-    if (result.gameOver && !_runRecorded) {
-      _runRecorded = true;
-      _previousBest = widget.storage.bestScore;
-      final careerBefore = widget.storage.careerPoints;
-      _newLiveries = newlyUnlocked(careerBefore, careerBefore + _game.score);
-      widget.storage.recordRun(_game.score);
+    if (result.gameOver) _onGameOver();
+  }
+
+  /// The flag goes up. The run is not booked yet unless it was already
+  /// continued with a Pit Stop; otherwise it is booked on leaving the flag.
+  void _onGameOver() {
+    final storage = widget.storage;
+    _previousBest = storage.bestScore;
+    final careerBefore = storage.careerPoints;
+    _newLiveries = [
+      for (final i in newlyUnlocked(careerBefore, careerBefore + _game.score))
+        if (storage.liveryAdsWatched(i) < liveryAdsRequired) i,
+    ];
+    storage.setPendingRunScore(_game.score);
+    if (_pitStopUsed) {
+      _finishRun();
+    } else {
+      _ads.refresh();
     }
   }
 
+  /// Books the finished run. Safe to call repeatedly.
+  Future<void> _finishRun() async {
+    if (_runRecorded || !_game.isGameOver) return;
+    _runRecorded = true;
+    await widget.storage.recordRun(_game.score);
+  }
+
+  /// Leaves the Chequered flag: books the run, shows an interstitial if one
+  /// is due (never right after a Pit Stop), then runs [then].
+  Future<void> _leaveFlag(VoidCallback then) async {
+    if (_leaving) return;
+    _leaving = true;
+    await _finishRun();
+    await _ads.showInterstitialIfDue(afterPitStop: _pitStopUsed);
+    _leaving = false;
+    if (mounted) then();
+  }
+
+  Future<void> _pitStop() async {
+    if (_pitStopBusy) return;
+    setState(() => _pitStopBusy = true);
+    final earned = await _ads.showRewarded(RewardedPlacement.pitStop);
+    if (!mounted) return;
+    setState(() {
+      _pitStopBusy = false;
+      if (!earned) return;
+      // Same run: board and score stay, only the tray is replaced.
+      _game.tray.setAll(0, _game.dealFittingTray());
+      _pitStopUsed = true;
+    });
+    if (earned) _boardTick.value++;
+  }
+
   void _restart() {
+    widget.storage.setPendingRunScore(0);
     setState(() {
       _game = widget.newGame();
       _runRecorded = false;
+      _pitStopUsed = false;
+      _pitStopBusy = false;
       _flashed = false;
       _newLiveries = const [];
       _bestAtStart = widget.storage.bestScore;
@@ -508,6 +573,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
           storage: widget.storage,
           audio: _audio,
           haptics: _haptics,
+          consent: _ads.consent,
         ),
       ),
     );
@@ -523,8 +589,10 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   }
 
   @override
-  Widget build(BuildContext context) =>
-      ListenableBuilder(listenable: widget.storage, builder: _buildScreen);
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: Listenable.merge([widget.storage, _ads]),
+    builder: _buildScreen,
+  );
 
   Widget _buildScreen(BuildContext context, Widget? _) {
     final theme = _theme;
@@ -617,11 +685,25 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                       linesCleared: _game.linesCleared,
                       bestCombo: _game.bestCombo,
                       piecesPlaced: _game.piecesPlaced,
-                      onNewRace: _restart,
-                      onGarage: _garage,
+                      onNewRace: () => _leaveFlag(_restart),
+                      onGarage: () => _leaveFlag(_garage),
                       newLiveries: _newLiveries,
                       equippedLivery: widget.storage.selectedLivery,
                       onEquip: widget.storage.selectLivery,
+                      pitStop:
+                          isPitStopEligible(
+                            usedThisRun: _pitStopUsed,
+                            adLoaded: _ads.isRewardedReady(
+                              RewardedPlacement.pitStop,
+                            ),
+                            adsAllowed: _ads.adsAllowed,
+                            runRecorded: _runRecorded,
+                          )
+                          ? PitStopButton(
+                              theme: theme,
+                              onTap: _pitStopBusy || _leaving ? null : _pitStop,
+                            )
+                          : null,
                     ),
                   ),
               ],

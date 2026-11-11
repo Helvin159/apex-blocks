@@ -5,6 +5,8 @@ import 'package:apexblocks/theme/themes.dart';
 import 'package:apexblocks/ui/board_geometry.dart';
 import 'package:apexblocks/ui/board_view.dart';
 import 'package:apexblocks/game/game_state.dart';
+import 'package:apexblocks/game/piece.dart';
+import 'package:apexblocks/services/ads_service.dart';
 import 'package:apexblocks/services/storage_service.dart';
 import 'package:apexblocks/ui/game_over_screen.dart';
 import 'package:apexblocks/ui/effects/clear_effects.dart';
@@ -20,6 +22,7 @@ Future<StorageService> pumpScreen(
   GameState Function()? newGame,
   RecordingAudio? audio,
   RecordingHaptics? haptics,
+  FakeAds? ads,
 }) async {
   useScreen(tester, size);
   final storage = await makeStorage(prefs);
@@ -30,6 +33,7 @@ Future<StorageService> pumpScreen(
         newGame: newGame ?? GameState.new,
         audio: audio,
         haptics: haptics,
+        ads: ads,
       ),
     ),
   );
@@ -235,7 +239,7 @@ void main() {
     expect(storage.gamesPlayed, 0);
   });
 
-  testWidgets('game over shows the flag and books the run exactly once', (
+  testWidgets('game over shows the flag; leaving it books the run once', (
     tester,
   ) async {
     final storage = await pumpScreen(
@@ -250,24 +254,27 @@ void main() {
 
     expect(find.byType(GameOverScreen), findsOneWidget);
     expect(find.text('CHEQUERED FLAG'), findsOneWidget);
-    expect(storage.gamesPlayed, 4);
-    expect(storage.careerPoints, 101); // 1 point for the single
-    expect(storage.bestScore, 50);
+    // Not booked yet: a Pit Stop could still continue the run.
+    expect(storage.gamesPlayed, 3);
+    expect(storage.careerPoints, 100);
 
-    // Rebuilds and extra frames never book it again.
+    // Rebuilds and extra frames never book it.
     for (var i = 0; i < 5; i++) {
       await tester.pump(const Duration(milliseconds: 100));
     }
     // ignore: invalid_use_of_protected_member
     tester.state<State>(find.byType(GameScreen)).setState(() {});
     await tester.pumpAndSettle();
+    expect(storage.gamesPlayed, 3);
+
+    await tester.tap(find.text('NEW RACE'));
+    await tester.pumpAndSettle();
     expect(storage.gamesPlayed, 4);
-    expect(storage.careerPoints, 101);
+    expect(storage.careerPoints, 101); // 1 point for the single
+    expect(storage.bestScore, 50);
   });
 
-  testWidgets('NEW RACE starts a fresh run that books once more', (
-    tester,
-  ) async {
+  testWidgets('NEW RACE books the run and starts a fresh one', (tester) async {
     final storage = await pumpScreen(
       tester,
       const Size(375, 667),
@@ -276,16 +283,19 @@ void main() {
     await dragToCell(tester, 0, 0, 1);
     await tester.pumpAndSettle();
     expect(find.text('NEW POLE!'), findsOneWidget);
-    expect(storage.bestScore, 1);
+    expect(storage.bestScore, 0);
 
     await tester.tap(find.text('NEW RACE'));
     await tester.pumpAndSettle();
+    expect(storage.bestScore, 1);
     expect(find.byType(GameOverScreen), findsNothing);
     expect(scoreOf(tester), '0');
 
     await dragToCell(tester, 0, 0, 3);
     await tester.pumpAndSettle();
     expect(find.byType(GameOverScreen), findsOneWidget);
+    await tester.tap(find.text('NEW RACE'));
+    await tester.pumpAndSettle();
     expect(storage.gamesPlayed, 2);
     expect(storage.careerPoints, 2);
   });
@@ -409,4 +419,198 @@ void main() {
     await tester.pumpAndSettle();
     expect(effects.isActive, isFalse);
   });
+
+  group('Pit Stop and ads', () {
+    const size = Size(375, 667);
+    final pitStopButton = find.text('PIT STOP · FRESH TYRES');
+
+    Future<void> reachFlag(WidgetTester tester) async {
+      await dragToCell(tester, 0, 0, 1);
+      await tester.pumpAndSettle();
+      expect(find.byType(GameOverScreen), findsOneWidget);
+    }
+
+    testWidgets('is offered only when ads are allowed and an ad is loaded', (
+      tester,
+    ) async {
+      await pumpScreen(tester, size, newGame: nearlyDeadGame, ads: FakeAds());
+      await reachFlag(tester);
+      expect(pitStopButton, findsOneWidget);
+      expect(find.text('Watch an ad, get 3 pieces that fit'), findsOneWidget);
+      expect(find.text('One pit stop per race'), findsOneWidget);
+    });
+
+    for (final (label, ads) in [
+      ('no ad loaded', FakeAds(pitStopReady: false)),
+      ('ads not allowed (no consent)', FakeAds(allowed: false)),
+    ]) {
+      testWidgets('is hidden with $label', (tester) async {
+        await pumpScreen(tester, size, newGame: nearlyDeadGame, ads: ads);
+        await reachFlag(tester);
+        expect(pitStopButton, findsNothing);
+      });
+    }
+
+    testWidgets('is hidden without an ads service', (tester) async {
+      await pumpScreen(tester, size, newGame: nearlyDeadGame);
+      await reachFlag(tester);
+      expect(pitStopButton, findsNothing);
+      expect(find.text('NEW RACE'), findsOneWidget);
+    });
+
+    testWidgets('reward resumes the same run with a fresh tray', (
+      tester,
+    ) async {
+      final ads = FakeAds();
+      final storage = await pumpScreen(
+        tester,
+        size,
+        newGame: _pitStopGame,
+        ads: ads,
+      );
+      await reachFlag(tester);
+      await tester.tap(pitStopButton);
+      await tester.pumpAndSettle();
+
+      expect(ads.rewardedShown, [RewardedPlacement.pitStop]);
+      expect(find.byType(GameOverScreen), findsNothing);
+      expect(scoreOf(tester), '1'); // score kept
+      expect(storage.gamesPlayed, 0); // the run is still going
+      expect(storage.careerPoints, 0);
+    });
+
+    testWidgets('a closed ad without the reward changes nothing', (
+      tester,
+    ) async {
+      final ads = FakeAds(rewardEarned: false);
+      final storage = await pumpScreen(
+        tester,
+        size,
+        newGame: _pitStopGame,
+        ads: ads,
+      );
+      await reachFlag(tester);
+      await tester.tap(pitStopButton);
+      await tester.pumpAndSettle();
+      expect(find.byType(GameOverScreen), findsOneWidget);
+      expect(pitStopButton, findsOneWidget);
+      expect(storage.gamesPlayed, 0);
+    });
+
+    testWidgets('run is booked exactly once after a Pit Stop', (tester) async {
+      final ads = FakeAds();
+      final storage = await pumpScreen(
+        tester,
+        size,
+        newGame: _pitStopGame,
+        ads: ads,
+      );
+      await reachFlag(tester);
+      await tester.tap(pitStopButton);
+      await tester.pumpAndSettle();
+
+      // Second game over: the run truly ends and is booked at once.
+      await dragToCell(tester, 0, 0, 3);
+      await tester.pumpAndSettle();
+      expect(find.byType(GameOverScreen), findsOneWidget);
+      expect(pitStopButton, findsNothing); // one pit stop per race
+      expect(storage.gamesPlayed, 1);
+      expect(storage.careerPoints, 2); // the final score, counted once
+
+      await tester.tap(find.text('NEW RACE'));
+      await tester.pumpAndSettle();
+      expect(storage.gamesPlayed, 1);
+      expect(storage.careerPoints, 2);
+      // Never an interstitial right after a Pit Stop ad.
+      expect(ads.interstitialRequests, [true]);
+    });
+
+    testWidgets('run without a Pit Stop is booked once on NEW RACE', (
+      tester,
+    ) async {
+      final ads = FakeAds();
+      final storage = await pumpScreen(
+        tester,
+        size,
+        newGame: nearlyDeadGame,
+        ads: ads,
+      );
+      await reachFlag(tester);
+      expect(ads.interstitialRequests, isEmpty); // never over the results
+      await tester.tap(find.text('NEW RACE'));
+      await tester.pumpAndSettle();
+      expect(storage.gamesPlayed, 1);
+      expect(storage.careerPoints, 1);
+      expect(ads.interstitialRequests, [false]);
+    });
+
+    testWidgets('the interstitial is only requested on leaving the flag', (
+      tester,
+    ) async {
+      final ads = FakeAds();
+      await pumpScreen(tester, size, ads: ads);
+      await tester.tap(find.byTooltip('Menu'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('RESTART'));
+      await tester.pumpAndSettle();
+      expect(ads.interstitialRequests, isEmpty); // never mid-run
+    });
+
+    testWidgets('leaving the flag by back gesture still books the run', (
+      tester,
+    ) async {
+      final storage = await pumpScreen(tester, size, newGame: nearlyDeadGame);
+      await reachFlag(tester);
+      expect(storage.gamesPlayed, 0);
+      await tester.pumpWidget(const SizedBox());
+      await tester.pumpAndSettle();
+      expect(storage.gamesPlayed, 1);
+      expect(storage.careerPoints, 1);
+    });
+
+    testWidgets('a livery earned by the run can be equipped on the flag', (
+      tester,
+    ) async {
+      final storage = await pumpScreen(
+        tester,
+        size,
+        prefs: {'careerPoints': 4999},
+        newGame: nearlyDeadGame,
+      );
+      await reachFlag(tester);
+      expect(find.text('LIVERY UNLOCKED · RAIN RACE'), findsOneWidget);
+      expect(storage.gamesPlayed, 0); // not booked yet
+      await tester.tap(find.text('Equip'));
+      await tester.pumpAndSettle();
+      expect(storage.selectedLivery, 1);
+    });
+
+    testWidgets('a livery already unlocked by ads shows no banner', (
+      tester,
+    ) async {
+      await pumpScreen(
+        tester,
+        size,
+        prefs: {'careerPoints': 4999, 'liveryAds_1': 3},
+        newGame: nearlyDeadGame,
+      );
+      await reachFlag(tester);
+      expect(find.textContaining('LIVERY UNLOCKED'), findsNothing);
+    });
+  });
 }
+
+/// The dead-end position of [nearlyDeadGame], whose Pit Stop tray is again a
+/// single and two squares, so the run ends a second time on the next single.
+class _PitStopGameState extends GameState {
+  _PitStopGameState(GameState from) : super(board: from.board, tray: from.tray);
+
+  @override
+  List<Piece> dealFittingTray() => [
+    family(PieceFamily.single),
+    family(PieceFamily.square2),
+    family(PieceFamily.square2),
+  ];
+}
+
+GameState _pitStopGame() => _PitStopGameState(nearlyDeadGame());

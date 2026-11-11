@@ -27,6 +27,10 @@ class AudioService {
   /// Sound on/off. A settings toggle arrives in a later milestone.
   final ValueNotifier<bool> enabled = ValueNotifier(true);
 
+  /// True while an ad is on screen: nothing plays.
+  bool _muted = false;
+  bool get muted => _muted;
+
   final bool _silent;
   final Map<String, _SoundPool> _pools = {};
   bool _ready = false;
@@ -85,9 +89,12 @@ class AudioService {
   }
 
   void _play(String name) {
-    if (_silent || !_ready || !enabled.value) return;
+    if (_silent || _muted || !_ready || !enabled.value) return;
     _pools[name]?.play();
   }
+
+  /// Silences every sound while an ad is showing; pass false to restore.
+  void setMuted(bool value) => _muted = value;
 
   void playPlace() => _play('place');
 

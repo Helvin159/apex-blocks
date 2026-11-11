@@ -1,3 +1,4 @@
+import 'package:apexblocks/services/ads_service.dart';
 import 'package:apexblocks/ui/game_screen.dart';
 import 'package:apexblocks/theme/themes.dart';
 import 'package:apexblocks/ui/home_screen.dart';
@@ -58,11 +59,15 @@ void main() {
 
     await tester.tap(find.text('DESERT DUSK'));
     await tester.pump();
+    await tester.pumpAndSettle();
     expect(
-      find.text('Earn 15,000 career points to unlock Desert Dusk'),
+      find.text('Locked. Earn 15,000 career points (5,000 so far).'),
       findsOneWidget,
     );
+    expect(find.textContaining('Watch ad'), findsNothing); // no ads here
     expect(storage.selectedLivery, 0);
+    await tester.tapAt(const Offset(10, 10)); // dismiss the sheet
+    await tester.pumpAndSettle();
 
     await tester.tap(find.text('RAIN RACE'));
     await tester.pump();
@@ -116,5 +121,85 @@ void main() {
     expect(find.byType(GameScreen), findsNothing);
     expect(find.text('ROUND 2 · NIGHT RACE'), findsOneWidget);
     expect(find.text('500'), findsOneWidget);
+  });
+
+  group('livery unlock by ads', () {
+    const size = Size(375, 667);
+
+    testWidgets('cards mention ads only while a livery ad is on offer', (
+      tester,
+    ) async {
+      useScreen(tester, size);
+      final storage = await makeStorage({'liveryAds_1': 1});
+      await tester.pumpWidget(
+        MaterialApp(
+          home: HomeScreen(storage: storage, ads: FakeAds()),
+        ),
+      );
+      expect(find.text('1/3 ads watched'), findsOneWidget);
+      expect(find.text('or watch 3 ads'), findsOneWidget);
+
+      final off = await makeStorage();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: HomeScreen(
+            key: UniqueKey(), // a new State, so it takes the new ads
+            storage: off,
+            ads: FakeAds(liveryReady: false),
+          ),
+        ),
+      );
+      expect(find.textContaining('watch'), findsNothing);
+    });
+
+    testWidgets('three rewarded ads unlock the livery, with the banner', (
+      tester,
+    ) async {
+      useScreen(tester, size);
+      final storage = await makeStorage();
+      final ads = FakeAds();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: HomeScreen(storage: storage, ads: ads),
+        ),
+      );
+      await tester.tap(find.text('DESERT DUSK'));
+      await tester.pumpAndSettle();
+
+      for (var n = 1; n <= 2; n++) {
+        await tester.tap(find.text('Watch ad ($n/3)'));
+        await tester.pumpAndSettle();
+        expect(storage.liveryAdsWatched(2), n);
+        expect(storage.isLiveryUnlockedNow(2), isFalse);
+      }
+      expect(storage.liveryAdsWatched(1), 0); // independent per livery
+
+      await tester.tap(find.text('Watch ad (3/3)'));
+      await tester.pumpAndSettle();
+      expect(ads.rewardedShown, everyElement(RewardedPlacement.liveryUnlock));
+      expect(storage.isLiveryUnlockedNow(2), isTrue);
+      expect(find.text('LIVERY UNLOCKED · DESERT DUSK'), findsOneWidget);
+
+      await tester.tap(find.text('Equip'));
+      await tester.pumpAndSettle();
+      expect(storage.selectedLivery, 2);
+    });
+
+    testWidgets('an ad closed without the reward counts for nothing', (
+      tester,
+    ) async {
+      useScreen(tester, size);
+      final storage = await makeStorage();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: HomeScreen(storage: storage, ads: FakeAds(rewardEarned: false)),
+        ),
+      );
+      await tester.tap(find.text('RAIN RACE'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Watch ad (1/3)'));
+      await tester.pumpAndSettle();
+      expect(storage.liveryAdsWatched(1), 0);
+    });
   });
 }

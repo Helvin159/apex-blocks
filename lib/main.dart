@@ -1,7 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'config/ad_config.dart';
+import 'services/ads_service.dart';
 import 'services/audio_service.dart';
 import 'services/haptics_service.dart';
 import 'services/storage_service.dart';
@@ -17,8 +21,19 @@ Future<void> main() async {
   await audio.init();
   final haptics = HapticsService();
   applySavedSettings(storage, audio, haptics);
+  await storage.incrementLaunchCount();
   await _registerFontLicenses();
-  runApp(ApexBlocksApp(storage: storage, audio: audio, haptics: haptics));
+  final ads = AdsService(
+    config: AdConfig.current,
+    storage: storage,
+    audio: audio,
+  );
+  runApp(
+    ApexBlocksApp(storage: storage, audio: audio, haptics: haptics, ads: ads),
+  );
+  // After the first frame, so the consent form can present over the home
+  // screen. No ad loads before consent allows it.
+  unawaited(ads.start());
 }
 
 /// Registers the SIL Open Font License texts of the bundled fonts.
@@ -39,12 +54,14 @@ class ApexBlocksApp extends StatelessWidget {
   final StorageService storage;
   final AudioService? audio;
   final HapticsService? haptics;
+  final AdsService? ads;
 
   const ApexBlocksApp({
     super.key,
     required this.storage,
     this.audio,
     this.haptics,
+    this.ads,
   });
 
   @override
@@ -64,7 +81,12 @@ class ApexBlocksApp extends StatelessWidget {
               surface: theme.background,
             ),
           ),
-          home: HomeScreen(storage: storage, audio: audio, haptics: haptics),
+          home: HomeScreen(
+            storage: storage,
+            audio: audio,
+            haptics: haptics,
+            ads: ads,
+          ),
         );
       },
     );

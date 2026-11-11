@@ -4,6 +4,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../game/unlocks.dart';
+import '../services/ad_rules.dart';
+import '../services/ads_service.dart';
 import '../services/audio_service.dart';
 import '../services/haptics_service.dart';
 import '../services/storage_service.dart';
@@ -11,6 +13,7 @@ import '../theme/themes.dart';
 import 'block_painter.dart';
 import 'checkered.dart';
 import 'game_screen.dart';
+import 'livery_sheet.dart';
 import 'setup_sheet.dart';
 import 'start_lights.dart';
 
@@ -29,6 +32,9 @@ class HomeScreen extends StatefulWidget {
   final AudioService? audio;
   final HapticsService? haptics;
 
+  /// Consent and ads; none when omitted (tests).
+  final AdsService? ads;
+
   /// Randomizes the start-light hold; tests pass a seeded one.
   final math.Random? random;
 
@@ -37,6 +43,7 @@ class HomeScreen extends StatefulWidget {
     required this.storage,
     this.audio,
     this.haptics,
+    this.ads,
     this.random,
   });
 
@@ -48,6 +55,7 @@ class _HomeScreenState extends State<HomeScreen> {
   late final AudioService _audio = widget.audio ?? AudioService.silent();
   late final HapticsService _haptics =
       widget.haptics ?? HapticsService.silent();
+  late final AdsService _ads = widget.ads ?? AdsService.disabled();
   late final StartSequence _sequence = StartSequence(
     audio: _audio,
     random: widget.random,
@@ -72,6 +80,7 @@ class _HomeScreenState extends State<HomeScreen> {
           storage: widget.storage,
           audio: _audio,
           haptics: _haptics,
+          ads: _ads,
         ),
       ),
     );
@@ -82,7 +91,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     final storage = widget.storage;
     return ListenableBuilder(
-      listenable: storage,
+      listenable: Listenable.merge([storage, _ads]),
       builder: (context, _) {
         final theme = storage.theme;
         return Scaffold(
@@ -133,7 +142,11 @@ class _HomeScreenState extends State<HomeScreen> {
                                   : null,
                             ),
                             const SizedBox(height: 12),
-                            _LiveryRow(theme: theme, storage: storage),
+                            _LiveryRow(
+                              theme: theme,
+                              storage: storage,
+                              ads: _ads,
+                            ),
                             const SizedBox(height: 4),
                             _SetupButton(
                               theme: theme,
@@ -142,6 +155,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 storage: storage,
                                 audio: _audio,
                                 haptics: _haptics,
+                                consent: _ads.consent,
                               ),
                             ),
                           ],
@@ -381,25 +395,30 @@ class _SetupButton extends StatelessWidget {
 class _LiveryRow extends StatelessWidget {
   final ApexTheme theme;
   final StorageService storage;
+  final AdsService ads;
 
-  const _LiveryRow({required this.theme, required this.storage});
+  const _LiveryRow({
+    required this.theme,
+    required this.storage,
+    required this.ads,
+  });
 
   void _onTap(BuildContext context, int i) {
-    final career = storage.careerPoints;
-    if (isLiveryUnlocked(i, career)) {
+    if (storage.isLiveryUnlockedNow(i)) {
       storage.selectLivery(i);
       return;
     }
-    final messenger = ScaffoldMessenger.of(context);
-    messenger.hideCurrentSnackBar();
-    messenger.showSnackBar(
-      SnackBar(
-        content: Text(
-          'Earn ${_withCommas(liveryUnlockPoints[i])} career points to '
-          'unlock ${allLiveries[i].name}',
-        ),
-      ),
-    );
+    ads.refresh();
+    showLiverySheet(context, storage: storage, ads: ads, livery: i);
+  }
+
+  /// "or watch 3 ads" / "1/3 ads watched", only while a livery ad is on offer.
+  String? _adsLine(int livery) {
+    if (!ads.isRewardedAvailable(RewardedPlacement.liveryUnlock)) return null;
+    final watched = storage.liveryAdsWatched(livery);
+    return watched == 0
+        ? 'or watch $liveryAdsRequired ads'
+        : '$watched/$liveryAdsRequired ads watched';
   }
 
   @override
@@ -416,7 +435,9 @@ class _LiveryRow extends StatelessWidget {
               livery: allLiveries[i],
               unlockPoints: liveryUnlockPoints[i],
               equipped: i == selected,
+              locked: !storage.isLiveryUnlockedNow(i),
               career: career,
+              adsLine: _adsLine(i),
               onTap: () => _onTap(context, i),
             ),
           ),
@@ -431,7 +452,11 @@ class _LiveryCard extends StatelessWidget {
   final ApexTheme livery;
   final int unlockPoints;
   final bool equipped;
+  final bool locked;
   final int career;
+
+  /// Second status line about rewarded ads; null when none are on offer.
+  final String? adsLine;
   final VoidCallback onTap;
 
   const _LiveryCard({
@@ -439,13 +464,14 @@ class _LiveryCard extends StatelessWidget {
     required this.livery,
     required this.unlockPoints,
     required this.equipped,
+    required this.locked,
     required this.career,
+    required this.adsLine,
     required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    final locked = career < unlockPoints;
     final String status;
     if (equipped) {
       status = 'EQUIPPED';
@@ -509,6 +535,21 @@ class _LiveryCard extends StatelessWidget {
                 ),
               ),
             ),
+            if (locked && adsLine != null) ...[
+              const SizedBox(height: 2),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  adsLine!,
+                  style: TextStyle(
+                    fontFamily: 'Inter',
+                    fontVariations: const [FontVariation('wght', 500)],
+                    fontSize: 10,
+                    color: theme.highlight,
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
       ),

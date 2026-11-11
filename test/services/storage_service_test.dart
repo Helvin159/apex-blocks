@@ -14,14 +14,19 @@ void main() {
     expect(s.bestScore, 0);
     expect(s.careerPoints, 0);
     expect(s.gamesPlayed, 0);
-    expect(s.firstSession, isTrue);
+    expect(s.isFirstSession, isTrue);
+    expect(s.launchCount, 0);
+    expect(s.adsRemoved, isFalse);
+    expect(s.gameOversSinceInterstitial, 0);
+    expect(s.liveryAdsWatched(1), 0);
   });
 
   test('every field survives a relaunch', () async {
     final s = await open();
     await s.recordRun(120);
     await s.recordRun(80);
-    await s.endFirstSession();
+    await s.incrementLaunchCount();
+    await s.incrementLaunchCount();
 
     // A new service on the same preferences, like a fresh app start.
     final again = StorageService.open(await SharedPreferences.getInstance());
@@ -29,7 +34,8 @@ void main() {
     expect(r.bestScore, 120);
     expect(r.careerPoints, 200);
     expect(r.gamesPlayed, 2);
-    expect(r.firstSession, isFalse);
+    expect(r.launchCount, 2);
+    expect(r.isFirstSession, isFalse);
   });
 
   test('best score only increases', () async {
@@ -96,5 +102,80 @@ void main() {
     expect(s.selectedLivery, 0);
     final saved = await open({'careerPoints': 100, 'selectedLivery': 2});
     expect(saved.selectedLivery, 0);
+  });
+
+  test('the first session is launch #1 only', () async {
+    final s = await open();
+    await s.incrementLaunchCount();
+    expect(s.isFirstSession, isTrue);
+    await s.incrementLaunchCount();
+    expect(s.isFirstSession, isFalse);
+  });
+
+  test('livery ad progress: 1/3, 2/3, unlock on 3/3, per livery', () async {
+    final s = await open();
+    expect(s.isLiveryUnlockedNow(1), isFalse);
+    expect(await s.recordLiveryAdWatched(1), 1);
+    expect(await s.recordLiveryAdWatched(1), 2);
+    expect(s.isLiveryUnlockedNow(1), isFalse);
+    expect(await s.recordLiveryAdWatched(1), 3);
+    expect(s.isLiveryUnlockedNow(1), isTrue);
+    expect(s.liveryAdsWatched(2), 0);
+    expect(s.isLiveryUnlockedNow(2), isFalse); // independent per livery
+    expect(await s.selectLivery(1), isTrue);
+  });
+
+  test('livery ad progress survives a relaunch', () async {
+    final s = await open();
+    await s.recordLiveryAdWatched(2);
+    await s.recordLiveryAdWatched(2);
+    final r = await StorageService.open(await SharedPreferences.getInstance());
+    expect(r.liveryAdsWatched(2), 2);
+    await r.recordLiveryAdWatched(2);
+    expect(r.isLiveryUnlockedNow(2), isTrue);
+  });
+
+  test('interstitial counter: first-session runs do not count', () async {
+    final s = await open({'launchCount': 1});
+    await s.recordRun(10);
+    expect(s.gameOversSinceInterstitial, 0);
+
+    final later = await open({'launchCount': 2});
+    await later.recordRun(10);
+    await later.recordRun(10);
+    expect(later.gameOversSinceInterstitial, 2);
+    await later.resetInterstitialCounter();
+    expect(later.gameOversSinceInterstitial, 0);
+  });
+
+  test('adsRemoved persists', () async {
+    final s = await open();
+    await s.setAdsRemoved(true);
+    final r = await StorageService.open(await SharedPreferences.getInstance());
+    expect(r.adsRemoved, isTrue);
+  });
+
+  test(
+    'a pending run score unlocks a livery until the run is booked',
+    () async {
+      final s = await open({'careerPoints': 4900});
+      expect(await s.selectLivery(1), isFalse);
+      s.setPendingRunScore(150);
+      expect(await s.selectLivery(1), isTrue);
+      expect(s.selectedLivery, 1);
+      expect(s.careerPoints, 4900); // not booked yet
+      await s.recordRun(150);
+      expect(s.pendingCareerPoints, 0);
+      expect(s.careerPoints, 5050);
+      expect(s.selectedLivery, 1);
+    },
+  );
+
+  test('an abandoned pending score no longer unlocks anything', () async {
+    final s = await open({'careerPoints': 4900});
+    s.setPendingRunScore(150);
+    await s.selectLivery(1);
+    s.setPendingRunScore(0);
+    expect(s.selectedLivery, 0);
   });
 }

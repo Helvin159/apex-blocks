@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 
 import '../services/audio_service.dart';
+import '../services/consent_service.dart';
 import '../services/haptics_service.dart';
 import '../services/storage_service.dart';
 import '../theme/themes.dart';
 
 /// Keep in sync with `version:` in pubspec.yaml (no package_info_plus).
-const String appVersion = '1.0.0+4';
+const String appVersion = '1.0.0+5';
 
 const String _appName = 'Apex Blocks';
 
@@ -26,6 +27,7 @@ Future<void> showSetupSheet(
   required StorageService storage,
   required AudioService audio,
   required HapticsService haptics,
+  ConsentService? consent,
 }) {
   final theme = storage.theme;
   return showModalBottomSheet<void>(
@@ -35,8 +37,12 @@ Future<void> showSetupSheet(
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
     ),
-    builder: (_) =>
-        SetupSheet(storage: storage, audio: audio, haptics: haptics),
+    builder: (_) => SetupSheet(
+      storage: storage,
+      audio: audio,
+      haptics: haptics,
+      consent: consent,
+    ),
   );
 }
 
@@ -45,11 +51,15 @@ class SetupSheet extends StatelessWidget {
   final AudioService audio;
   final HapticsService haptics;
 
+  /// Source of the "Privacy choices" row; the row is absent when null.
+  final ConsentService? consent;
+
   const SetupSheet({
     super.key,
     required this.storage,
     required this.audio,
     required this.haptics,
+    this.consent,
   });
 
   @override
@@ -95,6 +105,25 @@ class SetupSheet extends StatelessWidget {
                     storage.setHapticsOn(v);
                   },
                 ),
+                if (consent != null)
+                  ValueListenableBuilder<bool>(
+                    valueListenable: consent!.privacyOptionsRequired,
+                    builder: (context, required, _) => required
+                        ? ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            minTileHeight: 48,
+                            title: Text(
+                              'Privacy choices',
+                              style: _rowStyle(theme),
+                            ),
+                            trailing: Icon(
+                              Icons.chevron_right,
+                              color: theme.muted,
+                            ),
+                            onTap: consent!.showPrivacyOptions,
+                          )
+                        : const SizedBox.shrink(),
+                  ),
                 ListTile(
                   contentPadding: EdgeInsets.zero,
                   minTileHeight: 48,

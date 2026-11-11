@@ -28,7 +28,7 @@ class GameOverScreen extends StatelessWidget {
   final int equippedLivery;
   final ValueChanged<int>? onEquip;
 
-  /// Room for the Pit Stop button (milestone 6); nothing is shown when null.
+  /// The Pit Stop button ([PitStopButton]); nothing is shown when null.
   final Widget? pitStop;
 
   const GameOverScreen({
@@ -89,7 +89,7 @@ class GameOverScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 18),
                     for (final i in newLiveries) ...[
-                      _LiveryUnlocked(
+                      LiveryUnlockedBanner(
                         theme: theme,
                         name: allLiveries[i].name,
                         equipped: equippedLivery == i,
@@ -343,13 +343,14 @@ class _MenuButton extends StatelessWidget {
 }
 
 /// "LIVERY UNLOCKED · NAME" banner with an Equip button.
-class _LiveryUnlocked extends StatelessWidget {
+class LiveryUnlockedBanner extends StatelessWidget {
   final ApexTheme theme;
   final String name;
   final bool equipped;
   final VoidCallback onEquip;
 
-  const _LiveryUnlocked({
+  const LiveryUnlockedBanner({
+    super.key,
     required this.theme,
     required this.name,
     required this.equipped,
@@ -396,6 +397,74 @@ class _LiveryUnlocked extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// "PIT STOP · FRESH TYRES": watch a rewarded ad, get 3 pieces that fit.
+class PitStopButton extends StatelessWidget {
+  final ApexTheme theme;
+
+  /// Null while the ad is showing, so it cannot be tapped twice.
+  final VoidCallback? onTap;
+
+  const PitStopButton({super.key, required this.theme, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      height: 68,
+      child: FilledButton(
+        style: FilledButton.styleFrom(
+          backgroundColor: theme.highlight,
+          foregroundColor: const Color(0xFF1A1300),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+        onPressed: onTap,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.play_circle_fill, size: 30),
+            const SizedBox(width: 10),
+            Flexible(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'PIT STOP · FRESH TYRES',
+                      style: TextStyle(
+                        fontFamily: 'BarlowCondensed',
+                        fontWeight: FontWeight.w800,
+                        fontStyle: FontStyle.italic,
+                        fontSize: 24,
+                        height: 1,
+                        letterSpacing: 1,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      'Watch an ad, get 3 pieces that fit',
+                      style: TextStyle(
+                        fontFamily: 'Inter',
+                        fontVariations: const [FontVariation('wght', 600)],
+                        fontSize: 12,
+                        height: 1,
+                        color: const Color(0xFF1A1300).withValues(alpha: 0.75),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

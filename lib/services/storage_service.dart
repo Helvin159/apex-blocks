@@ -5,14 +5,18 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../game/unlocks.dart';
 import '../theme/themes.dart';
+import 'ad_rules.dart';
 
 const String _bestScoreKey = 'bestScore';
 const String _careerPointsKey = 'careerPoints';
 const String _gamesPlayedKey = 'gamesPlayed';
-const String _firstSessionKey = 'firstSession';
+const String _launchCountKey = 'launchCount';
 const String _selectedLiveryKey = 'selectedLivery';
 const String _soundOnKey = 'soundOn';
 const String _hapticsOnKey = 'hapticsOn';
+const String _adsRemovedKey = 'adsRemoved';
+const String _interstitialCounterKey = 'gameOversSinceInterstitial';
+const String _liveryAdsKeyPrefix = 'liveryAds_';
 
 /// What [StorageService.recordRun] changed.
 typedef RunRecord = ({int previousBest, bool isNewBest});
@@ -35,13 +39,41 @@ class StorageService extends ChangeNotifier {
 
   int get gamesPlayed => _prefs.getInt(_gamesPlayedKey) ?? 0;
 
-  /// True until [endFirstSession] is called.
-  bool get firstSession => _prefs.getBool(_firstSessionKey) ?? true;
+  /// How many times the app has been launched (see [incrementLaunchCount]).
+  int get launchCount => _prefs.getInt(_launchCountKey) ?? 0;
+
+  /// The first session is launch #1 only.
+  bool get isFirstSession => launchCount <= 1;
+
+  /// Remove Ads was bought (milestone 7): no interstitials.
+  bool get adsRemoved => _prefs.getBool(_adsRemovedKey) ?? false;
+
+  /// Game overs since the last interstitial was shown; first-session game
+  /// overs are not counted.
+  int get gameOversSinceInterstitial =>
+      _prefs.getInt(_interstitialCounterKey) ?? 0;
+
+  /// Score of a run that ended but is not booked yet (the Chequered flag is
+  /// up and a Pit Stop could still continue it). In memory only. Unlock
+  /// checks count it, so a livery the run earned can be equipped at once.
+  int _pendingCareerPoints = 0;
+  int get pendingCareerPoints => _pendingCareerPoints;
+
+  /// Rewarded ads watched toward [livery]'s unlock.
+  int liveryAdsWatched(int livery) =>
+      _prefs.getInt('$_liveryAdsKeyPrefix$livery') ?? 0;
+
+  /// Whether [livery] is unlocked, by career points or by rewarded ads.
+  bool isLiveryUnlockedNow(int livery) => isLiveryUnlockedWith(
+    livery: livery,
+    careerPoints: careerPoints + _pendingCareerPoints,
+    adsWatched: liveryAdsWatched(livery),
+  );
 
   /// Index of the equipped livery; Night Race if the saved one is locked.
   int get selectedLivery {
     final saved = _prefs.getInt(_selectedLiveryKey) ?? defaultLivery;
-    return isLiveryUnlocked(saved, careerPoints) ? saved : defaultLivery;
+    return isLiveryUnlockedNow(saved) ? saved : defaultLivery;
   }
 
   /// The equipped livery's colors.
@@ -53,7 +85,7 @@ class StorageService extends ChangeNotifier {
 
   /// Equips [livery] if it is unlocked; returns whether it was.
   Future<bool> selectLivery(int livery) async {
-    if (!isLiveryUnlocked(livery, careerPoints)) return false;
+    if (!isLiveryUnlockedNow(livery)) return false;
     await _prefs.setInt(_selectedLiveryKey, livery);
     notifyListeners();
     return true;
@@ -69,6 +101,38 @@ class StorageService extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> setAdsRemoved(bool value) async {
+    await _prefs.setBool(_adsRemovedKey, value);
+    notifyListeners();
+  }
+
+  /// Counts an app launch. Call once at startup.
+  Future<void> incrementLaunchCount() async {
+    await _prefs.setInt(_launchCountKey, launchCount + 1);
+    notifyListeners();
+  }
+
+  /// Records one rewarded ad watched toward [livery]; returns the new count.
+  Future<int> recordLiveryAdWatched(int livery) async {
+    final watched = liveryAdsWatched(livery) + 1;
+    await _prefs.setInt('$_liveryAdsKeyPrefix$livery', watched);
+    notifyListeners();
+    return watched;
+  }
+
+  /// Call after an interstitial was shown.
+  Future<void> resetInterstitialCounter() async {
+    await _prefs.setInt(_interstitialCounterKey, 0);
+    notifyListeners();
+  }
+
+  /// Sets the score of a finished but unbooked run (see
+  /// [pendingCareerPoints]).
+  void setPendingRunScore(int score) {
+    _pendingCareerPoints = score;
+    notifyListeners();
+  }
+
   /// Debug-build testing aid: adds [points] career points.
   Future<void> debugAddCareerPoints(int points) async {
     assert(kDebugMode);
@@ -78,21 +142,20 @@ class StorageService extends ChangeNotifier {
   }
 
   /// Books a finished run: raises the best score if beaten, adds [score] to
-  /// career points and counts the game. Call once per run.
+  /// career points and counts the game. Call once per run, when the run truly
+  /// ends (not while a Pit Stop could still continue it).
   Future<RunRecord> recordRun(int score) async {
     final previousBest = bestScore;
     final isNewBest = score > previousBest;
+    _pendingCareerPoints = 0;
     await Future.wait([
       _prefs.setInt(_bestScoreKey, math.max(previousBest, score)),
       _prefs.setInt(_careerPointsKey, careerPoints + score),
       _prefs.setInt(_gamesPlayedKey, gamesPlayed + 1),
+      if (!isFirstSession)
+        _prefs.setInt(_interstitialCounterKey, gameOversSinceInterstitial + 1),
     ]);
     notifyListeners();
     return (previousBest: previousBest, isNewBest: isNewBest);
-  }
-
-  Future<void> endFirstSession() async {
-    await _prefs.setBool(_firstSessionKey, false);
-    notifyListeners();
   }
 }

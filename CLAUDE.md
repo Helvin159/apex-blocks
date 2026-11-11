@@ -137,6 +137,7 @@ Respect safe areas. Portrait only. Target 60 fps on mid-range phones. Touch targ
 - **Interstitial:** only between games, shown on every 3rd game over, at least 90 seconds apart, never during the player's first session, never mid-run.
 - **Remove Ads:** a non-consumable purchase with product ID `remove_ads`. It turns off interstitials; rewarded ads stay available as an opt-in. Include a "Restore Purchases" button in settings (Apple requires one).
 - During development, use Google's official **test** ad unit IDs only. Keep real IDs in one config file.
+- Use a separate rewarded ad unit per placement (Pit Stop continue vs. livery unlock), so AdMob reports demand for each separately. That livery-unlock number decides whether paid Livery Packs are worth building.
 - Run the UMP consent flow before loading any ads. On iOS, configure the App Tracking Transparency message.
 
 ## Persistence
@@ -145,6 +146,7 @@ Best score, career points, selected livery, livery unlock progress (rewarded ads
 ## Post-launch backlog (do NOT build in v1)
 - Tracks: alternate boards with fictional names only (never real circuits), e.g. Harbour Night (standard 8×8), Hairpin (L-shaped board), Chicane (fixed blocked cells), Long Straight (9×7), Rain Run (random blocked cells). Each needs its own best score. First update candidate if day-30 data shows players leaving from sameness.
 - Paid "Track Pack" (cosmetic/variety only, never easier scoring), only if tracks prove popular.
+- Livery Packs: paid, exclusive liveries that can't be earned with points (e.g. a Neon or Retro pack). Cosmetic only. Remove Ads unlocks the earnable liveries, not paid packs. Decide using the livery-unlock rewarded ad unit's numbers in AdMob.
 - Alternate app icons (iOS only; hidden on Android): concepts B Apex chevron, C Lights out, D Chequered block from the design canvas, as unlockable cosmetics (career points, or included with Remove Ads). v1 ships icon A only.
 
 ## Working rules for Claude Code

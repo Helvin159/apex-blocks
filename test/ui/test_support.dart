@@ -2,6 +2,7 @@ import 'package:apexblocks/game/board.dart';
 import 'package:apexblocks/game/game_state.dart';
 import 'package:apexblocks/game/piece.dart';
 import 'package:apexblocks/game/pieces.dart';
+import 'package:apexblocks/services/ads_service.dart';
 import 'package:apexblocks/services/audio_service.dart';
 import 'package:apexblocks/services/haptics_service.dart';
 import 'package:apexblocks/services/storage_service.dart';
@@ -100,4 +101,49 @@ GameState oneLineFromClearing() {
       family(PieceFamily.square2),
     ],
   );
+}
+
+/// An [AdsService] with scripted availability that records what was shown.
+class FakeAds extends AdsService {
+  FakeAds({
+    this.pitStopReady = true,
+    this.liveryReady = true,
+    this.rewardEarned = true,
+    this.allowed = true,
+  }) : super.disabled();
+
+  bool pitStopReady;
+  bool liveryReady;
+  bool rewardEarned;
+  bool allowed;
+
+  final List<RewardedPlacement> rewardedShown = [];
+
+  /// One entry per interstitial request: the `afterPitStop` argument.
+  final List<bool> interstitialRequests = [];
+
+  @override
+  bool get adsAllowed => allowed;
+
+  @override
+  bool isRewardedReady(RewardedPlacement placement) =>
+      allowed &&
+      (placement == RewardedPlacement.pitStop ? pitStopReady : liveryReady);
+
+  @override
+  bool isRewardedAvailable(RewardedPlacement placement) =>
+      isRewardedReady(placement);
+
+  @override
+  Future<bool> showRewarded(RewardedPlacement placement) async {
+    rewardedShown.add(placement);
+    return rewardEarned;
+  }
+
+  @override
+  Future<void> showInterstitialIfDue({required bool afterPitStop}) async =>
+      interstitialRequests.add(afterPitStop);
+
+  @override
+  void refresh() {}
 }
