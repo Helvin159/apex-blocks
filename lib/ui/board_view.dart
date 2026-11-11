@@ -9,9 +9,9 @@ import '../game/piece.dart';
 import '../theme/themes.dart';
 import 'block_painter.dart';
 import 'board_geometry.dart';
+import 'checkered.dart';
 
 const double _panelRadius = 14;
-const double _checkSize = 4;
 const double _weaveSpacing = 6;
 const double _weaveAlpha = 0.03;
 const double _glowPad = 3;
@@ -210,18 +210,11 @@ class _CarbonCache {
     );
 
     // Checkered strip along the top edge.
-    final light = Paint()..color = const Color(0xFFF2F4F7);
-    final dark = Paint()..color = theme.background;
-    final cols = (size.width / _checkSize).ceil();
-    final rows = (stripHeight / _checkSize).round();
-    for (var r = 0; r < rows; r++) {
-      for (var c = 0; c < cols; c++) {
-        canvas.drawRect(
-          Rect.fromLTWH(c * _checkSize, r * _checkSize, _checkSize, _checkSize),
-          (r + c).isEven ? light : dark,
-        );
-      }
-    }
+    paintCheckers(
+      canvas,
+      Rect.fromLTWH(0, 0, size.width, stripHeight),
+      theme.background,
+    );
     canvas.restore();
 
     canvas.drawRRect(

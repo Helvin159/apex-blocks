@@ -2,17 +2,21 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'theme/themes.dart';
-import 'ui/game_screen.dart';
+import 'services/storage_service.dart';
+import 'ui/home_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
   SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle.light);
-  runApp(const ApexBlocksApp());
+  final storage = await StorageService.open();
+  runApp(ApexBlocksApp(storage: storage));
 }
 
 class ApexBlocksApp extends StatelessWidget {
-  const ApexBlocksApp({super.key});
+  final StorageService storage;
+
+  const ApexBlocksApp({super.key, required this.storage});
 
   @override
   Widget build(BuildContext context) {
@@ -27,7 +31,7 @@ class ApexBlocksApp extends StatelessWidget {
           surface: nightRace.background,
         ),
       ),
-      home: const GameScreen(),
+      home: HomeScreen(storage: storage),
     );
   }
 }

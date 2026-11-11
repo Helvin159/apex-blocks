@@ -85,7 +85,12 @@ Rounded squares (radius ~6 on board, ~4 small) with a vertical 3-stop gradient, 
 
 ### Game screen
 - Top row: menu button (44 px), a timing-panel score box (red edge bar, "SCORE" label, big italic number), and a purple "POLE" box with the best score.
-- Pop-up area between the score and board: combo text in italic yellow, tilted ~-4°, e.g. "OVERTAKE!" with "COMBO ×3 · +180" below. Pop-up words: "Overtake!", "Slipstream!", "Fastest Lap!" (pick by combo size / lines cleared).
+- Pop-up area between the score and board: combo text in italic yellow, tilted ~-4°, e.g. "OVERTAKE!" with "COMBO ×3 · +180" below. Chosen by the pure function in `lib/ui/popup_text.dart`, where `combo` is the placement result's `comboAfter` (first clear = 1, next consecutive clear = 2, …) and `+points` is the placement's total points gained:
+  - 3+ lines cleared → "FASTEST LAP!"
+  - 2 lines → "SLIPSTREAM!"
+  - 1 line with combo ≥ 2 → "OVERTAKE!"
+  - 1 line, first clear → no word, just "+N"
+  - Second line "COMBO ×{combo} · +{points}" only when combo ≥ 2 (a first-clear "SLIPSTREAM!" / "FASTEST LAP!" shows the word alone). No clear → no pop-up.
 - Board: carbon panel with a checkered strip along its top edge and an 8 px inner padding, 4 px cell gaps.
 - Drag: the piece lifts above the finger (offset upward), scales to board-cell size, and casts a deep shadow. The ghost preview is a dashed outline tinted with the piece's color. Rows and columns that would clear get a glowing yellow outline before release. An invalid drop animates back to the tray.
 - Tray: dark panel with 3 slots at the bottom; a slot shows a dashed outline while its piece is lifted.

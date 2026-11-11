@@ -17,8 +17,12 @@ double blockRadiusFor(double size) =>
 // Racing-stripe sheen: a thin lighter band at ~115°.
 const double _sheenAngle = 115 * math.pi / 180;
 const double _sheenCenter = 0.45;
-const double _sheenWidth = 0.16;
-const double _sheenAlpha = 0.22;
+const double _sheenWidth = 0.06;
+const double _sheenAlpha = 0.14;
+
+// Darker bottom edge, in the block's exact dark color.
+const double _edgeRatio = 0.05;
+const double _edgeMin = 1.5;
 
 final Paint _fill = Paint();
 final Paint _stroke = Paint()..style = PaintingStyle.stroke;
@@ -92,16 +96,23 @@ void paintBlock(
   canvas.translate(rect.left, rect.top);
   final local = Offset.zero & rect.size;
   final localR = RRect.fromRectAndRadius(local, Radius.circular(r));
-  canvas.drawRRect(localR, _fill..shader = _gradient(colors, size));
+  // A shader's alpha is scaled by the paint color, so reset it to opaque or
+  // the gradient inherits the shadow's translucent black and looks dim.
+  canvas.drawRRect(
+    localR,
+    _fill
+      ..color = const Color(0xFFFFFFFF)
+      ..shader = _gradient(colors, size),
+  );
   _fill.shader = null;
 
   canvas.save();
   canvas.clipRRect(localR);
-  // Darker bottom edge.
-  final edge = math.max(1.5, size * 0.07);
+  // Darker bottom edge: a thin band in the exact dark value, no tint.
+  final edge = math.max(_edgeMin, size * _edgeRatio);
   canvas.drawRect(
     Rect.fromLTWH(0, size - edge, size, edge),
-    _fill..color = colors.dark.withValues(alpha: 0.85),
+    _fill..color = colors.dark,
   );
   // Racing-stripe sheen.
   canvas.drawPath(
@@ -136,6 +147,7 @@ void paintEmptyCell(Canvas canvas, Rect rect, Color color) {
   canvas.drawRect(
     Rect.fromLTWH(rect.left, rect.top, size, size * 0.35),
     _fill
+      ..color = const Color(0xFFFFFFFF)
       ..shader = Gradient.linear(
         rect.topLeft,
         Offset(rect.left, rect.top + size * 0.35),
@@ -146,6 +158,7 @@ void paintEmptyCell(Canvas canvas, Rect rect, Color color) {
   canvas.drawRect(
     Rect.fromLTWH(rect.left, rect.top, size * 0.25, size),
     _fill
+      ..color = const Color(0xFFFFFFFF)
       ..shader = Gradient.linear(
         rect.topLeft,
         Offset(rect.left + size * 0.25, rect.top),

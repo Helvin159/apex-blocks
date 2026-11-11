@@ -5,10 +5,14 @@ import 'package:flutter/material.dart';
 
 import '../game/game_state.dart';
 import '../game/piece.dart';
+import '../services/storage_service.dart';
 import '../theme/themes.dart';
 import 'block_painter.dart';
 import 'board_geometry.dart';
 import 'board_view.dart';
+import 'combo_popup.dart';
+import 'game_over_screen.dart';
+import 'popup_text.dart';
 import 'tray_view.dart';
 
 /// Time for a lifted piece to grow from tray size to board-cell size.
@@ -20,6 +24,15 @@ const int returnMs = 180;
 const double _screenPadding = 16;
 const double _sectionGap = 12;
 const double _headerHeight = 64;
+
+/// Menu button edge; also the minimum touch target.
+const double _menuButtonSize = 44;
+
+/// Height reserved between the header and the board for combo pop-ups.
+const double _popupHeight = 44;
+
+/// How long the score stays purple after passing the best score.
+const int scoreFlashMs = 900;
 
 /// Tray blocks are at most this fraction of a board cell.
 const double _trayCellMaxRatio = 0.6;
@@ -151,16 +164,39 @@ class _DragPainter extends CustomPainter {
 }
 
 class GameScreen extends StatefulWidget {
+  final StorageService storage;
   final ApexTheme theme;
 
-  const GameScreen({super.key, this.theme = nightRace});
+  /// Builds the game for each run; tests use it to start from a crafted
+  /// position.
+  final GameState Function() newGame;
+
+  const GameScreen({
+    super.key,
+    required this.storage,
+    this.theme = nightRace,
+    this.newGame = GameState.new,
+  });
 
   @override
   State<GameScreen> createState() => _GameScreenState();
 }
 
 class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
-  GameState _game = GameState();
+  late GameState _game = widget.newGame();
+
+  // Run bookkeeping. `_runRecorded` makes sure a finished run is booked once,
+  // however often the screen rebuilds.
+  bool _runRecorded = false;
+  late int _bestAtStart = widget.storage.bestScore;
+  int _previousBest = 0;
+  bool _flashed = false;
+  final ValueNotifier<PopupEvent?> _popup = ValueNotifier(null);
+  int _popupId = 0;
+  late final AnimationController _flashCtl = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: scoreFlashMs),
+  );
 
   /// Bumped whenever the board changes, so the board painter repaints.
   final ValueNotifier<int> _boardTick = ValueNotifier(0);
@@ -216,6 +252,8 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     _boardTick.dispose();
     _ghost.dispose();
     _hiddenSlot.dispose();
+    _popup.dispose();
+    _flashCtl.dispose();
     super.dispose();
   }
 
@@ -314,8 +352,10 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     if (target != null && _ghost.value != null) {
       final slot = s.slot;
       _endDrag();
-      setState(() => _game.place(slot, target.row, target.col));
+      late PlacementResult result;
+      setState(() => result = _game.place(slot, target.row, target.col));
       _boardTick.value++;
+      _afterPlacement(result);
     } else {
       _beginReturn(s);
     }
@@ -357,9 +397,54 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     _hiddenSlot.value = null;
   }
 
+  void _afterPlacement(PlacementResult result) {
+    final text = popupFor(result);
+    if (text != null) _popup.value = PopupEvent(++_popupId, text);
+
+    if (!_flashed && _bestAtStart > 0 && _game.score > _bestAtStart) {
+      _flashed = true;
+      _flashCtl.forward(from: 0);
+    }
+
+    if (result.gameOver && !_runRecorded) {
+      _runRecorded = true;
+      _previousBest = widget.storage.bestScore;
+      widget.storage.recordRun(_game.score);
+    }
+  }
+
   void _restart() {
-    setState(() => _game = GameState());
+    setState(() {
+      _game = widget.newGame();
+      _runRecorded = false;
+      _flashed = false;
+      _bestAtStart = widget.storage.bestScore;
+    });
+    _flashCtl.value = 0;
     _boardTick.value++;
+  }
+
+  void _garage() => Navigator.of(context).pop();
+
+  Future<void> _openMenu() async {
+    if (_session != null || _game.isGameOver) return;
+    final choice = await showModalBottomSheet<_MenuChoice>(
+      context: context,
+      backgroundColor: widget.theme.panel,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (_) => _PauseSheet(theme: widget.theme),
+    );
+    if (!mounted) return;
+    switch (choice) {
+      case _MenuChoice.restart:
+        _restart();
+      case _MenuChoice.garage:
+        _garage();
+      case _MenuChoice.resume || null:
+        break;
+    }
   }
 
   @override
@@ -373,7 +458,11 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
             final width = constraints.maxWidth - 2 * _screenPadding;
             final tray = trayMetrics(width);
             final trayPanelHeight = tray.slotHeight + 2 * trayPadding + 2;
-            final fixed = _headerHeight + trayPanelHeight + 4 * _sectionGap;
+            final fixed =
+                _headerHeight +
+                _popupHeight +
+                trayPanelHeight +
+                4 * _sectionGap;
             final boardWidth = (constraints.maxHeight - fixed - stripHeight)
                 .clamp(120.0, width);
             _geometry = BoardGeometry(boardWidth);
@@ -388,8 +477,19 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                       .copyWith(top: _sectionGap, bottom: _sectionGap),
                   child: Column(
                     children: [
-                      _ScoreBox(score: _game.score, theme: theme),
-                      const SizedBox(height: _sectionGap),
+                      _Header(
+                        theme: theme,
+                        score: _game.score,
+                        best: widget.storage.bestScore,
+                        flash: _flashCtl,
+                        onMenu: _openMenu,
+                      ),
+                      SizedBox(
+                        height: _popupHeight,
+                        child: Center(
+                          child: ComboPopup(event: _popup, theme: theme),
+                        ),
+                      ),
                       Expanded(
                         child: Center(
                           child: SizedBox(
@@ -420,10 +520,17 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                   ),
                 ),
                 if (_game.isGameOver)
-                  _GameOverLayer(
-                    score: _game.score,
-                    theme: theme,
-                    onRestart: _restart,
+                  Positioned.fill(
+                    child: GameOverScreen(
+                      theme: theme,
+                      score: _game.score,
+                      previousBest: _previousBest,
+                      linesCleared: _game.linesCleared,
+                      bestCombo: _game.bestCombo,
+                      piecesPlaced: _game.piecesPlaced,
+                      onNewRace: _restart,
+                      onGarage: _garage,
+                    ),
                   ),
               ],
             );
@@ -434,11 +541,71 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   }
 }
 
+/// Menu button, timing-panel score and POLE box.
+class _Header extends StatelessWidget {
+  final ApexTheme theme;
+  final int score;
+  final int best;
+  final Animation<double> flash;
+  final VoidCallback onMenu;
+
+  const _Header({
+    required this.theme,
+    required this.score,
+    required this.best,
+    required this.flash,
+    required this.onMenu,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: _headerHeight,
+      child: Row(
+        children: [
+          SizedBox(
+            width: _menuButtonSize,
+            height: _menuButtonSize,
+            child: IconButton(
+              tooltip: 'Menu',
+              padding: EdgeInsets.zero,
+              style: IconButton.styleFrom(
+                backgroundColor: theme.panelAlt,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  side: BorderSide(color: theme.border),
+                ),
+              ),
+              icon: Icon(Icons.menu, color: theme.text, size: 22),
+              onPressed: onMenu,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            flex: 3,
+            child: _ScoreBox(score: score, theme: theme, flash: flash),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            flex: 2,
+            child: _PoleBox(best: score > best ? score : best, theme: theme),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _ScoreBox extends StatelessWidget {
   final int score;
   final ApexTheme theme;
+  final Animation<double> flash;
 
-  const _ScoreBox({required this.score, required this.theme});
+  const _ScoreBox({
+    required this.score,
+    required this.theme,
+    required this.flash,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -454,33 +621,65 @@ class _ScoreBox extends StatelessWidget {
         children: [
           Container(width: 5, color: theme.accent),
           const SizedBox(width: 12),
-          Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'SCORE',
-                style: TextStyle(
-                  fontFamily: 'Inter',
-                  fontVariations: const [FontVariation('wght', 600)],
-                  fontSize: 11,
-                  letterSpacing: 1.5,
-                  height: 1,
-                  color: theme.muted,
+          Expanded(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('SCORE', style: _boxLabel(theme.muted)),
+                AnimatedBuilder(
+                  animation: flash,
+                  builder: (context, _) => FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      '$score',
+                      style: _boxNumber(
+                        // Purple at once, easing back to white.
+                        Color.lerp(
+                          theme.text,
+                          theme.pole,
+                          flash.value == 0 ? 0 : 1 - flash.value,
+                        )!,
+                      ),
+                    ),
+                  ),
                 ),
-              ),
-              Text(
-                '$score',
-                style: TextStyle(
-                  fontFamily: 'BarlowCondensed',
-                  fontWeight: FontWeight.w800,
-                  fontStyle: FontStyle.italic,
-                  fontSize: 34,
-                  height: 1.05,
-                  color: theme.text,
-                ),
-              ),
-            ],
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+        ],
+      ),
+    );
+  }
+}
+
+class _PoleBox extends StatelessWidget {
+  final int best;
+  final ApexTheme theme;
+
+  const _PoleBox({required this.best, required this.theme});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: _headerHeight,
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      decoration: BoxDecoration(
+        color: theme.pole.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: theme.pole),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('POLE', style: _boxLabel(theme.poleLight)),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text('$best', style: _boxNumber(theme.poleLight, size: 26)),
           ),
         ],
       ),
@@ -488,71 +687,111 @@ class _ScoreBox extends StatelessWidget {
   }
 }
 
-/// Placeholder game-over layer; the real Chequered Flag screen comes later.
-class _GameOverLayer extends StatelessWidget {
-  final int score;
-  final ApexTheme theme;
-  final VoidCallback onRestart;
+TextStyle _boxLabel(Color color) => TextStyle(
+  fontFamily: 'Inter',
+  fontVariations: const [FontVariation('wght', 600)],
+  fontSize: 11,
+  letterSpacing: 1.5,
+  height: 1,
+  color: color,
+);
 
-  const _GameOverLayer({
-    required this.score,
-    required this.theme,
-    required this.onRestart,
+TextStyle _boxNumber(Color color, {double size = 34}) => TextStyle(
+  fontFamily: 'BarlowCondensed',
+  fontWeight: FontWeight.w800,
+  fontStyle: FontStyle.italic,
+  fontSize: size,
+  height: 1.05,
+  color: color,
+);
+
+enum _MenuChoice { resume, restart, garage }
+
+class _PauseSheet extends StatelessWidget {
+  final ApexTheme theme;
+
+  const _PauseSheet({required this.theme});
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _SheetButton(
+              label: 'RESUME',
+              color: theme.accent,
+              filled: true,
+              onTap: () => Navigator.pop(context, _MenuChoice.resume),
+            ),
+            const SizedBox(height: 10),
+            _SheetButton(
+              label: 'RESTART',
+              color: theme.highlight,
+              onTap: () => Navigator.pop(context, _MenuChoice.restart),
+            ),
+            const SizedBox(height: 10),
+            _SheetButton(
+              label: 'GARAGE',
+              color: theme.muted,
+              onTap: () => Navigator.pop(context, _MenuChoice.garage),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SheetButton extends StatelessWidget {
+  final String label;
+  final Color color;
+  final bool filled;
+  final VoidCallback onTap;
+
+  const _SheetButton({
+    required this.label,
+    required this.color,
+    required this.onTap,
+    this.filled = false,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Positioned.fill(
-      child: ColoredBox(
-        color: theme.background.withValues(alpha: 0.85),
-        child: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                'GAME OVER',
-                style: TextStyle(
-                  fontFamily: 'BarlowCondensed',
-                  fontWeight: FontWeight.w800,
-                  fontStyle: FontStyle.italic,
-                  fontSize: 40,
-                  color: theme.text,
-                ),
+    const style = TextStyle(
+      fontFamily: 'BarlowCondensed',
+      fontWeight: FontWeight.w800,
+      fontStyle: FontStyle.italic,
+      fontSize: 22,
+      letterSpacing: 1,
+    );
+    final shape = RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(12),
+    );
+    return SizedBox(
+      width: double.infinity,
+      height: 52,
+      child: filled
+          ? FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: color,
+                foregroundColor: Colors.white,
+                shape: shape,
               ),
-              const SizedBox(height: 4),
-              Text(
-                'Score $score',
-                style: TextStyle(
-                  fontFamily: 'BarlowCondensed',
-                  fontWeight: FontWeight.w600,
-                  fontSize: 24,
-                  color: theme.muted,
-                ),
+              onPressed: onTap,
+              child: Text(label, style: style),
+            )
+          : OutlinedButton(
+              style: OutlinedButton.styleFrom(
+                foregroundColor: color,
+                side: BorderSide(color: color, width: 2),
+                shape: shape,
               ),
-              const SizedBox(height: 24),
-              SizedBox(
-                width: 200,
-                height: 52,
-                child: FilledButton(
-                  style: FilledButton.styleFrom(
-                    backgroundColor: theme.accent,
-                    foregroundColor: Colors.white,
-                  ),
-                  onPressed: onRestart,
-                  child: const Text(
-                    'Restart',
-                    style: TextStyle(
-                      fontFamily: 'BarlowCondensed',
-                      fontWeight: FontWeight.w700,
-                      fontSize: 22,
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
+              onPressed: onTap,
+              child: Text(label, style: style),
+            ),
     );
   }
 }
