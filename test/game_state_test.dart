@@ -187,7 +187,7 @@ void main() {
           random: rng,
           board: b,
           tray: [single, single, single],
-        );
+        )..score = rng.nextInt(2000);
         final dealt = g.dealTray();
         expect(dealt.length, traySize);
         for (final p in dealt) {
@@ -196,7 +196,7 @@ void main() {
       }
     });
 
-    test('falls back to singles when only 1×1 gaps exist', () {
+    test('only singles are dealt when only 1×1 gaps exist', () {
       final b = Board();
       for (var r = 0; r < boardSize; r++) {
         for (var c = 0; c < boardSize; c++) {
@@ -213,6 +213,48 @@ void main() {
           expect(p.family, PieceFamily.single);
         }
       }
+    });
+
+    test('singles are not a rescue: on an open board they follow weight', () {
+      final g = GameState(
+        random: Random(11),
+        board: Board(),
+        tray: [single, single, single],
+      );
+      var singles = 0, total = 0;
+      for (var i = 0; i < 2000; i++) {
+        for (final p in g.dealTray()) {
+          total++;
+          if (p.family == PieceFamily.single) singles++;
+        }
+      }
+      final expected =
+          easyWeights[PieceFamily.single]! /
+          easyWeights.values.fold<double>(0, (a, b) => a + b);
+      expect(singles / total, closeTo(expected, 0.02));
+    });
+
+    test('a single is rarer than larger pieces when both fit', () {
+      // Most of the board is full, but a 2×2 gap and a 1×1 gap both exist.
+      final b = boardWithOnly([
+        (row: 0, col: 0),
+        (row: 0, col: 1),
+        (row: 1, col: 0),
+        (row: 1, col: 1),
+        (row: 7, col: 7),
+      ]);
+      final g = GameState(
+        random: Random(3),
+        board: b,
+        tray: [single, single, single],
+      );
+      var singles = 0, larger = 0;
+      for (var i = 0; i < 1000; i++) {
+        for (final p in g.dealTray()) {
+          p.family == PieceFamily.single ? singles++ : larger++;
+        }
+      }
+      expect(larger, greaterThan(singles));
     });
 
     test('still deals when nothing can fit', () {

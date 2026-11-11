@@ -92,4 +92,41 @@ void main() {
     final seen = {for (var i = 0; i < 5000; i++) pickPiece(rng).family};
     expect(seen, PieceFamily.values.toSet());
   });
+
+  group('weightsForScore', () {
+    test('equals easy at or below the ramp start', () {
+      expect(weightsForScore(0), easyWeights);
+      expect(weightsForScore(rampStartScore), easyWeights);
+    });
+
+    test('equals hard at or above the ramp end', () {
+      expect(weightsForScore(rampEndScore), hardWeights);
+      expect(weightsForScore(99999), hardWeights);
+    });
+
+    test('is halfway at 900', () {
+      final mid = weightsForScore(900);
+      for (final f in PieceFamily.values) {
+        expect(mid[f], closeTo((easyWeights[f]! + hardWeights[f]!) / 2, 1e-9));
+      }
+    });
+
+    test('family weight is still split evenly across orientations', () {
+      for (final score in [0, 450, 900, 1300, 2000]) {
+        final weights = weightsForScore(score);
+        for (final family in PieceFamily.values) {
+          final pieces = piecesByFamily[family]!;
+          final total = pieces.fold<double>(
+            0,
+            (sum, p) => sum + orientationWeight(p, weights),
+          );
+          expect(total, closeTo(weights[family]!, 1e-9));
+          expect(
+            pieces.map((p) => orientationWeight(p, weights)).toSet().length,
+            1,
+          );
+        }
+      }
+    });
+  });
 }

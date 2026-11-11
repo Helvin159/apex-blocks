@@ -8,10 +8,6 @@ import 'scoring.dart';
 /// Number of pieces in the tray.
 const int traySize = 3;
 
-/// How many times the fair dealer re-rolls a slot before falling back to a
-/// single.
-const int dealerMaxRetries = 10;
-
 /// How many random picks `dealFittingTray` tries per slot before using a single.
 const int fittingPickAttempts = 50;
 
@@ -143,12 +139,8 @@ class GameState {
     );
   }
 
-  /// Fair dealer: every piece fits the current board on its own. Each slot
-  /// re-rolls up to [dealerMaxRetries] times, then falls back to a single
-  /// (dealt even if the board is full, since that is game over).
-  List<Piece> dealTray() => [
-    for (var i = 0; i < traySize; i++) _fittingPiece(dealerMaxRetries),
-  ];
+  /// Fair dealer: see [dealFairTray].
+  List<Piece> dealTray() => dealFairTray(_random, board, score);
 
   /// Three pieces that each fit the current board, falling back to singles.
   List<Piece> dealFittingTray() => [
@@ -162,4 +154,16 @@ class GameState {
     }
     return singlePiece;
   }
+}
+
+/// Deals a tray by weight (blended for [score], see [weightsForScore]) from
+/// only the pieces that fit [board] right now. If nothing fits, deals by
+/// weight anyway; that board is game over.
+List<Piece> dealFairTray(Random random, Board board, int score) {
+  final weights = weightsForScore(score);
+  final fits = {for (final p in allPieces) p: board.anyPlacementFor(p)};
+  return [
+    for (var i = 0; i < traySize; i++)
+      pickPiece(random, weights: weights, where: (p) => fits[p]!),
+  ];
 }

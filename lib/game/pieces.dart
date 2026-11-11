@@ -28,31 +28,59 @@ const Map<PieceFamily, int> familyColorIds = {
 
 // Spawn weights per family. A family's weight is split evenly across its
 // orientations, so adding orientations never changes how often it appears.
-const double weightSingle = 6;
-const double weightDomino = 10;
-const double weightLineTromino = 8;
-const double weightLTromino = 8;
-const double weightSquare2 = 8;
-const double weightLineTetromino = 6;
-const double weightLTetromino = 6;
-const double weightTTetromino = 4;
-const double weightSTetromino = 4;
-const double weightLinePentomino = 3;
-const double weightSquare3 = 2;
+// Two tables: the dealer blends from easy to hard as the run's score climbs.
 
-const Map<PieceFamily, double> familyWeights = {
-  PieceFamily.single: weightSingle,
-  PieceFamily.domino: weightDomino,
-  PieceFamily.lineTromino: weightLineTromino,
-  PieceFamily.lTromino: weightLTromino,
-  PieceFamily.square2: weightSquare2,
-  PieceFamily.lineTetromino: weightLineTetromino,
-  PieceFamily.lTetromino: weightLTetromino,
-  PieceFamily.tTetromino: weightTTetromino,
-  PieceFamily.sTetromino: weightSTetromino,
-  PieceFamily.linePentomino: weightLinePentomino,
-  PieceFamily.square3: weightSquare3,
+/// Weights at the start of a run (score <= [rampStartScore]).
+const Map<PieceFamily, double> easyWeights = {
+  PieceFamily.single: 6,
+  PieceFamily.domino: 10,
+  PieceFamily.lineTromino: 8,
+  PieceFamily.lTromino: 8,
+  PieceFamily.square2: 8,
+  PieceFamily.lineTetromino: 6,
+  PieceFamily.lTetromino: 6,
+  PieceFamily.tTetromino: 4,
+  PieceFamily.sTetromino: 4,
+  PieceFamily.linePentomino: 3,
+  PieceFamily.square3: 2,
 };
+
+/// Weights late in a run (score >= [rampEndScore]).
+const Map<PieceFamily, double> hardWeights = {
+  PieceFamily.single: 2,
+  PieceFamily.domino: 6,
+  PieceFamily.lineTromino: 6,
+  PieceFamily.lTromino: 6,
+  PieceFamily.square2: 8,
+  PieceFamily.lineTetromino: 8,
+  PieceFamily.lTetromino: 9,
+  PieceFamily.tTetromino: 7,
+  PieceFamily.sTetromino: 7,
+  PieceFamily.linePentomino: 5,
+  PieceFamily.square3: 5,
+};
+
+/// Score where the blend from easy to hard weights begins.
+const int rampStartScore = 300;
+
+/// Score where the weights are fully hard.
+const int rampEndScore = 1500;
+
+/// The default weight table (the easy one).
+const Map<PieceFamily, double> familyWeights = easyWeights;
+
+/// Linear blend from [easyWeights] to [hardWeights] between [rampStartScore]
+/// and [rampEndScore], clamped at both ends.
+Map<PieceFamily, double> weightsForScore(int score) {
+  final t = ((score - rampStartScore) / (rampEndScore - rampStartScore)).clamp(
+    0.0,
+    1.0,
+  );
+  return {
+    for (final f in PieceFamily.values)
+      f: easyWeights[f]! + (hardWeights[f]! - easyWeights[f]!) * t,
+  };
+}
 
 class _FamilySpec {
   final PieceFamily family;
@@ -156,22 +184,34 @@ final List<Piece> allPieces = List.unmodifiable(
 );
 
 /// Spawn weight of one orientation: the family weight split evenly.
-double orientationWeight(Piece piece) =>
-    familyWeights[piece.family]! / piecesByFamily[piece.family]!.length;
+double orientationWeight(
+  Piece piece, [
+  Map<PieceFamily, double> weights = easyWeights,
+]) => weights[piece.family]! / piecesByFamily[piece.family]!.length;
 
-/// The single-cell piece, used as the dealer's last-resort fallback.
+/// The single-cell piece, used by the rewarded-continue fallback.
 final Piece singlePiece = piecesByFamily[PieceFamily.single]!.first;
 
-/// Picks one piece by spawn weight.
-Piece pickPiece(Random random) {
-  final total = allPieces.fold<double>(
+/// Picks one piece by spawn weight, only from pieces accepted by [where]
+/// (all pieces by default). Falls back to every piece if none is accepted.
+Piece pickPiece(
+  Random random, {
+  Map<PieceFamily, double> weights = easyWeights,
+  bool Function(Piece)? where,
+}) {
+  var pool = allPieces;
+  if (where != null) {
+    final filtered = allPieces.where(where).toList();
+    if (filtered.isNotEmpty) pool = filtered;
+  }
+  final total = pool.fold<double>(
     0,
-    (sum, p) => sum + orientationWeight(p),
+    (sum, p) => sum + orientationWeight(p, weights),
   );
   var roll = random.nextDouble() * total;
-  for (final piece in allPieces) {
-    roll -= orientationWeight(piece);
+  for (final piece in pool) {
+    roll -= orientationWeight(piece, weights);
     if (roll < 0) return piece;
   }
-  return allPieces.last;
+  return pool.last;
 }

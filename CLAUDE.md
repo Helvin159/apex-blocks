@@ -53,7 +53,8 @@ Each family has a fixed color id (0–5, matching the six block colors). Game lo
 
 ### Dealing
 - Deal 3 weighted-random pieces.
-- Every piece in a fresh tray must fit the current board on its own (re-roll per slot, fall back to a single). Game over only happens through the order the player places pieces.
+- Pick each piece by weight from ONLY the pieces that fit the current board right now, so every piece in a fresh tray fits on its own. There is no single-block rescue: singles appear only by their (low) weight. If nothing fits, deal anyway (that is game over). Game over otherwise only happens through the order the player places pieces.
+- Weights depend on the run's score (see Difficulty). The rewarded continue's `dealFittingTray()` keeps its own behavior (3 fitting pieces, singles as a last resort).
 
 ### Scoring (all values are constants in `scoring.dart`)
 - Placement: +1 point per cell placed.
@@ -61,7 +62,13 @@ Each family has a fixed color id (0–5, matching the six block colors). Game lo
 - Combo: `combo` starts at 0. When a placement clears at least one line, its clear points are multiplied by (1 + combo × 0.5), and then `combo` increases by 1. A placement that clears nothing resets `combo` to 0. So the first clear is ×1.0, the next consecutive clear ×1.5, then ×2.0, ×2.5, and so on with no cap. The multiplier applies to clear points only, never to per-cell points. Example: placing 3 cells that clear 1 line with combo 2 scores 3 + 10 × 1 × 1 × 2.0 = 23.
 - Track and persist the best score.
 
+### Difficulty
+- Two weight tables in `pieces.dart`: `easyWeights` and `hardWeights`. The weights used are a linear blend from easy to hard as the run's score goes from `rampStartScore` (300) to `rampEndScore` (1500), clamped (`weightsForScore`). Singles stay in the set but get rarer (6 → 2).
+- Targets: a typical honest run lasts 4–8 minutes, good runs score 1,000–1,500, and 2,000+ is rare.
+- Measure with `dart run tool/simulate.dart` (greedy bot, seeded games, old vs new rules).
+
 ## Look: "Night Race"
+
 Approved design canvas: three phone screens (Home, In race, Chequered flag). Match it closely.
 
 ### Color tokens (default livery, in `themes.dart`)
@@ -126,6 +133,7 @@ Best score, career points, selected livery, livery unlock progress (rewarded ads
 ## Post-launch backlog (do NOT build in v1)
 - Tracks: alternate boards with fictional names only (never real circuits), e.g. Harbour Night (standard 8×8), Hairpin (L-shaped board), Chicane (fixed blocked cells), Long Straight (9×7), Rain Run (random blocked cells). Each needs its own best score. First update candidate if day-30 data shows players leaving from sameness.
 - Paid "Track Pack" (cosmetic/variety only, never easier scoring), only if tracks prove popular.
+- Alternate app icons (iOS only; hidden on Android): concepts B Apex chevron, C Lights out, D Chequered block from the design canvas, as unlockable cosmetics (career points, or included with Remove Ads). v1 ships icon A only.
 
 ## Working rules for Claude Code
 - Build in small steps. After each step, run `flutter analyze` and `flutter test`, and fix any issues before finishing.
