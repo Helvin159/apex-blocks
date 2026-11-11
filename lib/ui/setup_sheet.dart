@@ -1,13 +1,16 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../services/audio_service.dart';
 import '../services/consent_service.dart';
 import '../services/haptics_service.dart';
+import '../services/iap_service.dart';
 import '../services/storage_service.dart';
 import '../theme/themes.dart';
+import 'purchase_text.dart';
 
 /// Keep in sync with `version:` in pubspec.yaml (no package_info_plus).
-const String appVersion = '1.0.0+5';
+const String appVersion = '1.0.0+6';
 
 const String _appName = 'Apex Blocks';
 
@@ -21,13 +24,15 @@ void applySavedSettings(
   haptics.enabled.value = storage.hapticsOn;
 }
 
-/// Opens the Setup sheet: Sound and Haptics toggles, Licenses, version.
+/// Opens the Setup sheet: Sound and Haptics toggles, Restore Purchases,
+/// Licenses, version (and reset rows in debug builds).
 Future<void> showSetupSheet(
   BuildContext context, {
   required StorageService storage,
   required AudioService audio,
   required HapticsService haptics,
   ConsentService? consent,
+  IapService? iap,
 }) {
   final theme = storage.theme;
   return showModalBottomSheet<void>(
@@ -42,11 +47,12 @@ Future<void> showSetupSheet(
       audio: audio,
       haptics: haptics,
       consent: consent,
+      iap: iap,
     ),
   );
 }
 
-class SetupSheet extends StatelessWidget {
+class SetupSheet extends StatefulWidget {
   final StorageService storage;
   final AudioService audio;
   final HapticsService haptics;
@@ -54,18 +60,42 @@ class SetupSheet extends StatelessWidget {
   /// Source of the "Privacy choices" row; the row is absent when null.
   final ConsentService? consent;
 
+  /// Source of the "Restore Purchases" row; the row is absent when null.
+  final IapService? iap;
+
   const SetupSheet({
     super.key,
     required this.storage,
     required this.audio,
     required this.haptics,
     this.consent,
+    this.iap,
   });
 
   @override
+  State<SetupSheet> createState() => _SetupSheetState();
+}
+
+class _SetupSheetState extends State<SetupSheet> {
+  /// Result of the last Restore Purchases attempt.
+  String? _restoreMessage;
+
+  StorageService get storage => widget.storage;
+  AudioService get audio => widget.audio;
+  HapticsService get haptics => widget.haptics;
+  ConsentService? get consent => widget.consent;
+
+  Future<void> _restore(IapService iap) async {
+    setState(() => _restoreMessage = null);
+    final outcome = await iap.restore();
+    if (mounted) setState(() => _restoreMessage = restoreText(outcome));
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final iap = widget.iap;
     return ListenableBuilder(
-      listenable: storage,
+      listenable: Listenable.merge([storage, ?iap]),
       builder: (context, _) {
         final theme = storage.theme;
         return SafeArea(
@@ -124,6 +154,19 @@ class SetupSheet extends StatelessWidget {
                           )
                         : const SizedBox.shrink(),
                   ),
+                if (iap != null)
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    minTileHeight: 48,
+                    title: Text('Restore Purchases', style: _rowStyle(theme)),
+                    subtitle: iap.restoring
+                        ? Text('Restoring…', style: _noteStyle(theme))
+                        : _restoreMessage == null
+                        ? null
+                        : Text(_restoreMessage!, style: _noteStyle(theme)),
+                    trailing: Icon(Icons.chevron_right, color: theme.muted),
+                    onTap: iap.restoring ? null : () => _restore(iap),
+                  ),
                 ListTile(
                   contentPadding: EdgeInsets.zero,
                   minTileHeight: 48,
@@ -144,6 +187,27 @@ class SetupSheet extends StatelessWidget {
                     style: _rowStyle(theme).copyWith(color: theme.muted),
                   ),
                 ),
+                // Debug builds only; compiled out of release builds.
+                if (kDebugMode) ...[
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    minTileHeight: 48,
+                    title: Text(
+                      'Debug: reset purchase',
+                      style: _rowStyle(theme),
+                    ),
+                    onTap: storage.debugResetPurchase,
+                  ),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    minTileHeight: 48,
+                    title: Text(
+                      'Debug: reset all progress',
+                      style: _rowStyle(theme),
+                    ),
+                    onTap: storage.debugResetAllProgress,
+                  ),
+                ],
               ],
             ),
           ),
@@ -158,6 +222,13 @@ TextStyle _rowStyle(ApexTheme theme) => TextStyle(
   fontVariations: const [FontVariation('wght', 500)],
   fontSize: 16,
   color: theme.text,
+);
+
+TextStyle _noteStyle(ApexTheme theme) => TextStyle(
+  fontFamily: 'Inter',
+  fontVariations: const [FontVariation('wght', 500)],
+  fontSize: 13,
+  color: theme.muted,
 );
 
 class _ToggleRow extends StatelessWidget {

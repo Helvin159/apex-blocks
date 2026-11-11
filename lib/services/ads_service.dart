@@ -67,6 +67,7 @@ class AdsService extends ChangeNotifier {
   bool _initialized = false;
   bool _showing = false;
   DateTime? _lastInterstitial;
+  bool _hadAdsRemoved = false;
 
   AdsService({
     required AdConfig this._config,
@@ -80,6 +81,8 @@ class AdsService extends ChangeNotifier {
   }) : consent = consent ?? ConsentService(),
        _now = now ?? DateTime.now,
        _initSdk = initializer ?? _initMobileAds {
+    _hadAdsRemoved = _adsRemoved;
+    _storage!.addListener(_onStorageChanged);
     final rewardedLoad = rewardedLoader ?? _loadGoogleRewarded;
     final ids = _config!.ids;
     _rewarded[RewardedPlacement.pitStop] = _Slot(ids.pitStop, rewardedLoad);
@@ -111,6 +114,25 @@ class AdsService extends ChangeNotifier {
 
   bool get _adsRemoved => _storage?.adsRemoved ?? false;
 
+  /// Remove Ads changed during this session. When bought, the interstitial is
+  /// dropped for good (a loaded ad and any pending retry); rewarded slots are
+  /// untouched and stay available when tapped.
+  void _onStorageChanged() {
+    final removed = _adsRemoved;
+    if (removed == _hadAdsRemoved) return;
+    _hadAdsRemoved = removed;
+    if (!removed) {
+      refresh();
+      return;
+    }
+    final slot = _interstitial;
+    if (slot == null) return;
+    slot.retry?.cancel();
+    slot.ad?.dispose();
+    slot.ad = null;
+    notifyListeners();
+  }
+
   /// Runs the consent flow, then initializes the SDK and preloads the three
   /// units, but only if UMP allows ad requests. Never throws.
   Future<void> start() async {
@@ -141,13 +163,14 @@ class AdsService extends ChangeNotifier {
       slot.failures = 0;
       _load(slot);
     }
-    final interstitial = _interstitial!;
-    interstitial.failures = 0;
-    if (!_adsRemoved) _load(interstitial);
+    _interstitial!.failures = 0;
+    _load(_interstitial!);
   }
 
   void _load(_Slot slot) {
     if (!adsAllowed || slot.ad != null || slot.loading) return;
+    // Remove Ads: the interstitial is never even requested.
+    if (identical(slot, _interstitial) && _adsRemoved) return;
     slot.retry?.cancel();
     slot.loading = true;
     notifyListeners();
@@ -162,6 +185,12 @@ class AdsService extends ChangeNotifier {
       debugPrint('Ad load threw: $e');
     }
     slot.loading = false;
+    if (ad != null && identical(slot, _interstitial) && _adsRemoved) {
+      // Bought while this load was in flight.
+      ad.dispose();
+      notifyListeners();
+      return;
+    }
     if (ad == null) {
       slot.failures++;
       if (slot.failures <= adMaxRetries) {
@@ -255,6 +284,7 @@ class AdsService extends ChangeNotifier {
 
   @override
   void dispose() {
+    _storage?.removeListener(_onStorageChanged);
     for (final slot in [..._rewarded.values, ?_interstitial]) {
       slot.retry?.cancel();
       slot.ad?.dispose();

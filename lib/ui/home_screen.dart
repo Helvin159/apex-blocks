@@ -8,10 +8,12 @@ import '../services/ad_rules.dart';
 import '../services/ads_service.dart';
 import '../services/audio_service.dart';
 import '../services/haptics_service.dart';
+import '../services/iap_service.dart';
 import '../services/storage_service.dart';
 import '../theme/themes.dart';
 import 'block_painter.dart';
 import 'checkered.dart';
+import 'clean_air_sheet.dart';
 import 'game_screen.dart';
 import 'livery_sheet.dart';
 import 'setup_sheet.dart';
@@ -35,6 +37,9 @@ class HomeScreen extends StatefulWidget {
   /// Consent and ads; none when omitted (tests).
   final AdsService? ads;
 
+  /// The Remove Ads purchase; unavailable when omitted (tests).
+  final IapService? iap;
+
   /// Randomizes the start-light hold; tests pass a seeded one.
   final math.Random? random;
 
@@ -44,6 +49,7 @@ class HomeScreen extends StatefulWidget {
     this.audio,
     this.haptics,
     this.ads,
+    this.iap,
     this.random,
   });
 
@@ -56,6 +62,7 @@ class _HomeScreenState extends State<HomeScreen> {
   late final HapticsService _haptics =
       widget.haptics ?? HapticsService.silent();
   late final AdsService _ads = widget.ads ?? AdsService.disabled();
+  late final IapService _iap = widget.iap ?? IapService.disabled();
   late final StartSequence _sequence = StartSequence(
     audio: _audio,
     random: widget.random,
@@ -81,6 +88,7 @@ class _HomeScreenState extends State<HomeScreen> {
           audio: _audio,
           haptics: _haptics,
           ads: _ads,
+          iap: widget.iap,
         ),
       ),
     );
@@ -148,15 +156,42 @@ class _HomeScreenState extends State<HomeScreen> {
                               ads: _ads,
                             ),
                             const SizedBox(height: 4),
-                            _SetupButton(
-                              theme: theme,
-                              onTap: () => showSetupSheet(
-                                context,
-                                storage: storage,
-                                audio: _audio,
-                                haptics: _haptics,
-                                consent: _ads.consent,
-                              ),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                _BottomButton(
+                                  theme: theme,
+                                  label: 'SETUP',
+                                  onTap: () => showSetupSheet(
+                                    context,
+                                    storage: storage,
+                                    audio: _audio,
+                                    haptics: _haptics,
+                                    consent: _ads.consent,
+                                    iap: widget.iap,
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Flexible(
+                                  child: _BottomButton(
+                                    theme: theme,
+                                    label: storage.adsRemoved
+                                        ? 'CLEAN AIR · ACTIVE'
+                                        : 'CLEAN AIR · NO ADS',
+                                    color: storage.adsRemoved
+                                        ? theme.highlight
+                                        : theme.text,
+                                    // Active: nothing left to buy.
+                                    onTap: storage.adsRemoved
+                                        ? null
+                                        : () => showCleanAirSheet(
+                                            context,
+                                            storage: storage,
+                                            iap: _iap,
+                                          ),
+                                  ),
+                                ),
+                              ],
                             ),
                           ],
                         ),
@@ -364,22 +399,36 @@ class _PoleCard extends StatelessWidget {
   }
 }
 
-class _SetupButton extends StatelessWidget {
+/// A text button on the Home screen's bottom row (SETUP, CLEAN AIR).
+class _BottomButton extends StatelessWidget {
   final ApexTheme theme;
-  final VoidCallback onTap;
+  final String label;
+  final Color? color;
 
-  const _SetupButton({required this.theme, required this.onTap});
+  /// Null shows the label without reacting to taps.
+  final VoidCallback? onTap;
+
+  const _BottomButton({
+    required this.theme,
+    required this.label,
+    this.color,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
     return SizedBox(
       height: 44,
       child: TextButton(
-        style: TextButton.styleFrom(foregroundColor: theme.muted),
+        style: TextButton.styleFrom(
+          foregroundColor: color ?? theme.muted,
+          disabledForegroundColor: color ?? theme.muted,
+        ),
         onPressed: onTap,
-        child: const Text(
-          'SETUP',
-          style: TextStyle(
+        child: Text(
+          label,
+          maxLines: 1,
+          style: const TextStyle(
             fontFamily: 'BarlowCondensed',
             fontWeight: FontWeight.w700,
             fontStyle: FontStyle.italic,

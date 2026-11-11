@@ -5,6 +5,11 @@ import 'package:flutter/foundation.dart';
 /// official test IDs, so a stray build can never serve or click real ads.
 const bool realAdsRequested = bool.fromEnvironment('REAL_ADS');
 
+/// Store product ID of the Remove Ads non-consumable purchase. It must match
+/// the product created in App Store Connect (and later Google Play). Product
+/// IDs are not secret, so it lives here with the ad unit IDs.
+const String removeAdsProductId = 'remove_ads';
+
 /// Marks a real ID that has not been filled in yet.
 const String _placeholder = 'XXXX';
 

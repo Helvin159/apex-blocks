@@ -87,12 +87,17 @@ void main() {
   });
 
   group('isLiveryUnlockedWith', () {
-    bool unlocked(int livery, {int career = 0, int ads = 0}) =>
-        isLiveryUnlockedWith(
-          livery: livery,
-          careerPoints: career,
-          adsWatched: ads,
-        );
+    bool unlocked(
+      int livery, {
+      int career = 0,
+      int ads = 0,
+      bool removed = false,
+    }) => isLiveryUnlockedWith(
+      livery: livery,
+      careerPoints: career,
+      adsWatched: ads,
+      adsRemoved: removed,
+    );
 
     test('Night Race is always unlocked', () {
       expect(unlocked(0), isTrue);
@@ -114,6 +119,16 @@ void main() {
     test('out-of-range liveries stay locked', () {
       expect(unlocked(-1, ads: 3), isFalse);
       expect(unlocked(3, ads: 3, career: 99999), isFalse);
+      expect(unlocked(-1, removed: true), isFalse);
+      expect(unlocked(3, removed: true), isFalse);
+    });
+
+    test('Remove Ads unlocks every livery with no points or ads', () {
+      expect(unlocked(1), isFalse);
+      expect(unlocked(2), isFalse);
+      expect(unlocked(0, removed: true), isTrue);
+      expect(unlocked(1, removed: true), isTrue);
+      expect(unlocked(2, removed: true), isTrue);
     });
   });
 }

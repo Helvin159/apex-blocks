@@ -41,13 +41,33 @@ void main() {
     expect(find.text('ENDLESS BLOCK RACING'), findsOneWidget);
   });
 
-  testWidgets('shows SETUP; CLEAN AIR waits for the purchase milestone', (
-    tester,
-  ) async {
+  testWidgets('shows SETUP and CLEAN AIR · NO ADS', (tester) async {
     final storage = await makeStorage();
     await tester.pumpWidget(MaterialApp(home: HomeScreen(storage: storage)));
     expect(find.text('SETUP'), findsOneWidget);
-    expect(find.textContaining('CLEAN AIR'), findsNothing);
+    expect(find.text('CLEAN AIR · NO ADS'), findsOneWidget);
+    expect(find.text('CLEAN AIR · ACTIVE'), findsNothing);
+  });
+
+  testWidgets('after the purchase the button reads ACTIVE and does nothing', (
+    tester,
+  ) async {
+    useScreen(tester, const Size(375, 667));
+    final storage = await makeStorage({'adsRemoved': true});
+    await tester.pumpWidget(MaterialApp(home: HomeScreen(storage: storage)));
+    expect(find.text('CLEAN AIR · ACTIVE'), findsOneWidget);
+    expect(find.text('CLEAN AIR · NO ADS'), findsNothing);
+    await tester.tap(find.text('CLEAN AIR · ACTIVE'));
+    await tester.pumpAndSettle();
+    expect(find.text('CLEAN AIR'), findsNothing); // no sheet
+  });
+
+  testWidgets('Remove Ads shows both liveries as unlocked', (tester) async {
+    useScreen(tester, const Size(375, 667));
+    final storage = await makeStorage({'adsRemoved': true});
+    await tester.pumpWidget(MaterialApp(home: HomeScreen(storage: storage)));
+    expect(find.text('UNLOCKED'), findsNWidgets(2));
+    expect(find.textContaining(' pts'), findsNothing);
   });
 
   testWidgets('tapping a locked livery explains; unlocked one equips', (

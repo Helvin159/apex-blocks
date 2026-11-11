@@ -8,6 +8,8 @@ import 'config/ad_config.dart';
 import 'services/ads_service.dart';
 import 'services/audio_service.dart';
 import 'services/haptics_service.dart';
+import 'services/iap_gateway.dart';
+import 'services/iap_service.dart';
 import 'services/storage_service.dart';
 import 'ui/home_screen.dart';
 import 'ui/setup_sheet.dart';
@@ -28,9 +30,20 @@ Future<void> main() async {
     storage: storage,
     audio: audio,
   );
+  // Listening starts before any UI, so a purchase that finished while the app
+  // was closed is granted and completed at once.
+  final iap = IapService(storage: storage, gateway: InAppPurchaseGateway());
+  await iap.start();
   runApp(
-    ApexBlocksApp(storage: storage, audio: audio, haptics: haptics, ads: ads),
+    ApexBlocksApp(
+      storage: storage,
+      audio: audio,
+      haptics: haptics,
+      ads: ads,
+      iap: iap,
+    ),
   );
+  unawaited(iap.loadProduct());
   // After the first frame, so the consent form can present over the home
   // screen. No ad loads before consent allows it.
   unawaited(ads.start());
@@ -55,6 +68,7 @@ class ApexBlocksApp extends StatelessWidget {
   final AudioService? audio;
   final HapticsService? haptics;
   final AdsService? ads;
+  final IapService? iap;
 
   const ApexBlocksApp({
     super.key,
@@ -62,6 +76,7 @@ class ApexBlocksApp extends StatelessWidget {
     this.audio,
     this.haptics,
     this.ads,
+    this.iap,
   });
 
   @override
@@ -86,6 +101,7 @@ class ApexBlocksApp extends StatelessWidget {
             audio: audio,
             haptics: haptics,
             ads: ads,
+            iap: iap,
           ),
         );
       },

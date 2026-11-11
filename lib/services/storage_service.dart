@@ -45,7 +45,7 @@ class StorageService extends ChangeNotifier {
   /// The first session is launch #1 only.
   bool get isFirstSession => launchCount <= 1;
 
-  /// Remove Ads was bought (milestone 7): no interstitials.
+  /// Remove Ads was bought: no interstitials, every livery unlocked.
   bool get adsRemoved => _prefs.getBool(_adsRemovedKey) ?? false;
 
   /// Game overs since the last interstitial was shown; first-session game
@@ -68,6 +68,7 @@ class StorageService extends ChangeNotifier {
     livery: livery,
     careerPoints: careerPoints + _pendingCareerPoints,
     adsWatched: liveryAdsWatched(livery),
+    adsRemoved: adsRemoved,
   );
 
   /// Index of the equipped livery; Night Race if the saved one is locked.
@@ -101,7 +102,9 @@ class StorageService extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Idempotent: setting the current value again writes and notifies nothing.
   Future<void> setAdsRemoved(bool value) async {
+    if (value == adsRemoved) return;
     await _prefs.setBool(_adsRemovedKey, value);
     notifyListeners();
   }
@@ -138,6 +141,25 @@ class StorageService extends ChangeNotifier {
     assert(kDebugMode);
     if (!kDebugMode) return;
     await _prefs.setInt(_careerPointsKey, careerPoints + points);
+    notifyListeners();
+  }
+
+  /// Debug-build testing aid: forgets the Remove Ads purchase locally. The
+  /// store still owns it, so Restore Purchases brings it back.
+  Future<void> debugResetPurchase() async {
+    assert(kDebugMode);
+    if (!kDebugMode) return;
+    await _prefs.setBool(_adsRemovedKey, false);
+    notifyListeners();
+  }
+
+  /// Debug-build testing aid: wipes every saved value (scores, liveries,
+  /// settings, purchase flag, counters) for a clean first run.
+  Future<void> debugResetAllProgress() async {
+    assert(kDebugMode);
+    if (!kDebugMode) return;
+    _pendingCareerPoints = 0;
+    await _prefs.clear();
     notifyListeners();
   }
 

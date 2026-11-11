@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:apexblocks/config/ad_config.dart';
 import 'package:apexblocks/services/ad_rules.dart';
 import 'package:apexblocks/services/ads_service.dart';
@@ -251,6 +253,74 @@ void main() {
       await r.ads.showInterstitialIfDue(afterPitStop: false);
       expect(r.interstitialAds, isEmpty);
     });
+
+    test(
+      'Remove Ads bought mid-session: loaded interstitial dropped',
+      () async {
+        final r = await rig({
+          'launchCount': 2,
+          'gameOversSinceInterstitial': 3,
+        });
+        await r.ads.start();
+        await settle();
+        expect(r.interstitialLoads, 1);
+        final preloaded = r.interstitialAds.single;
+
+        await r.storage.setAdsRemoved(true);
+        expect(preloaded.disposed, isTrue);
+
+        await r.ads.showInterstitialIfDue(afterPitStop: false);
+        r.ads.refresh();
+        await settle();
+        expect(preloaded.shown, 0);
+        expect(r.interstitialLoads, 1); // never requested again
+      },
+    );
+
+    test(
+      'Remove Ads bought while an interstitial loads: it is dropped',
+      () async {
+        final r = await rig({'launchCount': 2});
+        final gate = Completer<void>();
+        final ads = AdsService(
+          config: AdConfig.forMode(realAds: false, isIOS: true),
+          storage: r.storage,
+          audio: r.audio,
+          consent: ConsentService(r.gateway),
+          rewardedLoader: (_) async => FakeAd(r.audio),
+          interstitialLoader: (_) async {
+            await gate.future;
+            final ad = FakeAd(r.audio);
+            r.interstitialAds.add(ad);
+            return ad;
+          },
+          initializer: () async {},
+        );
+        addTearDown(ads.dispose);
+        await ads.start();
+        await settle();
+        await r.storage.setAdsRemoved(true);
+        gate.complete();
+        await settle();
+        expect(r.interstitialAds.single.disposed, isTrue);
+        await ads.showInterstitialIfDue(afterPitStop: false);
+        expect(r.interstitialAds.single.shown, 0);
+      },
+    );
+
+    test(
+      'Remove Ads: rewarded ads stay available and show on request',
+      () async {
+        final r = await rig({'adsRemoved': true});
+        await r.ads.start();
+        await settle();
+        for (final placement in RewardedPlacement.values) {
+          expect(r.ads.isRewardedReady(placement), isTrue);
+          expect(await r.ads.showRewarded(placement), isTrue);
+        }
+        expect(r.interstitialLoads, 0);
+      },
+    );
 
     test('at least 90 s apart', () async {
       final r = await due();

@@ -37,13 +37,15 @@ bool isPitStopEligible({
   required bool runRecorded,
 }) => !usedThisRun && !runRecorded && adLoaded && adsAllowed;
 
-/// A livery is unlocked by career points or by [liveryAdsRequired] rewarded
-/// ads.
+/// A livery is unlocked by career points, by [liveryAdsRequired] rewarded
+/// ads, or instantly for every livery with Remove Ads ([adsRemoved]).
 bool isLiveryUnlockedWith({
   required int livery,
   required int careerPoints,
   required int adsWatched,
+  bool adsRemoved = false,
 }) =>
+    (adsRemoved && livery >= 0 && livery < liveryUnlockPoints.length) ||
     isLiveryUnlocked(livery, careerPoints) ||
     (livery > defaultLivery &&
         livery < liveryUnlockPoints.length &&

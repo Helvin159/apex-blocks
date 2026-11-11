@@ -148,6 +148,62 @@ void main() {
     expect(later.gameOversSinceInterstitial, 0);
   });
 
+  test('Remove Ads unlocks both liveries, and they can be equipped', () async {
+    final s = await open();
+    expect(s.isLiveryUnlockedNow(1), isFalse);
+    expect(s.isLiveryUnlockedNow(2), isFalse);
+    await s.setAdsRemoved(true);
+    expect(s.isLiveryUnlockedNow(1), isTrue);
+    expect(s.isLiveryUnlockedNow(2), isTrue);
+    expect(await s.selectLivery(2), isTrue);
+    expect(s.selectedLivery, 2);
+  });
+
+  test(
+    'setAdsRemoved is idempotent: no repeat write or notification',
+    () async {
+      final s = await open();
+      var notifications = 0;
+      s.addListener(() => notifications++);
+      await s.setAdsRemoved(true);
+      await s.setAdsRemoved(true);
+      expect(notifications, 1);
+      await s.setAdsRemoved(false);
+      expect(notifications, 2);
+      expect(s.adsRemoved, isFalse);
+    },
+  );
+
+  test('debug reset purchase clears only the purchase', () async {
+    final s = await open({'adsRemoved': true, 'bestScore': 900});
+    await s.debugResetPurchase();
+    expect(s.adsRemoved, isFalse);
+    expect(s.bestScore, 900);
+    expect(s.isLiveryUnlockedNow(1), isFalse);
+  });
+
+  test('debug reset all progress wipes everything', () async {
+    final s = await open({
+      'adsRemoved': true,
+      'bestScore': 900,
+      'careerPoints': 6000,
+      'selectedLivery': 1,
+      'soundOn': false,
+      'launchCount': 5,
+      'liveryAds_2': 2,
+    });
+    s.setPendingRunScore(300);
+    await s.debugResetAllProgress();
+    expect(s.adsRemoved, isFalse);
+    expect(s.bestScore, 0);
+    expect(s.careerPoints, 0);
+    expect(s.pendingCareerPoints, 0);
+    expect(s.selectedLivery, 0);
+    expect(s.soundOn, isTrue);
+    expect(s.launchCount, 0);
+    expect(s.liveryAdsWatched(2), 0);
+  });
+
   test('adsRemoved persists', () async {
     final s = await open();
     await s.setAdsRemoved(true);

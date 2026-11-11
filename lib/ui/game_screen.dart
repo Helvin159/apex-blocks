@@ -11,6 +11,7 @@ import '../services/ad_rules.dart';
 import '../services/ads_service.dart';
 import '../services/audio_service.dart';
 import '../services/haptics_service.dart';
+import '../services/iap_service.dart';
 import '../services/sound_plan.dart';
 import '../services/storage_service.dart';
 import '../theme/themes.dart';
@@ -187,6 +188,9 @@ class GameScreen extends StatefulWidget {
   /// Rewarded Pit Stop and between-race interstitials; no ads when omitted.
   final AdsService? ads;
 
+  /// Restore Purchases in the pause menu's Setup; the row is absent when null.
+  final IapService? iap;
+
   const GameScreen({
     super.key,
     required this.storage,
@@ -194,6 +198,7 @@ class GameScreen extends StatefulWidget {
     this.audio,
     this.haptics,
     this.ads,
+    this.iap,
   });
 
   @override
@@ -574,6 +579,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
           audio: _audio,
           haptics: _haptics,
           consent: _ads.consent,
+          iap: widget.iap,
         ),
       ),
     );
