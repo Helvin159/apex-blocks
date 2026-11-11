@@ -6,6 +6,7 @@ import 'package:apexblocks/ui/board_view.dart';
 import 'package:apexblocks/game/game_state.dart';
 import 'package:apexblocks/services/storage_service.dart';
 import 'package:apexblocks/ui/game_over_screen.dart';
+import 'package:apexblocks/ui/effects/clear_effects.dart';
 import 'package:apexblocks/ui/game_screen.dart';
 import 'package:apexblocks/ui/tray_view.dart';
 
@@ -16,12 +17,19 @@ Future<StorageService> pumpScreen(
   Size size, {
   Map<String, Object> prefs = const {},
   GameState Function()? newGame,
+  RecordingAudio? audio,
+  RecordingHaptics? haptics,
 }) async {
   useScreen(tester, size);
   final storage = await makeStorage(prefs);
   await tester.pumpWidget(
     MaterialApp(
-      home: GameScreen(storage: storage, newGame: newGame ?? GameState.new),
+      home: GameScreen(
+        storage: storage,
+        newGame: newGame ?? GameState.new,
+        audio: audio,
+        haptics: haptics,
+      ),
     ),
   );
   return storage;
@@ -56,13 +64,23 @@ Future<void> dragToBoardCenter(WidgetTester tester, int slot) async {
   await tester.pumpAndSettle();
 }
 
-/// Drags tray slot [slot] onto board cell ([row], [col]) and releases.
-Future<void> dragToCell(WidgetTester tester, int slot, int row, int col) async {
+/// Drags tray slot [slot] to board cell ([row], [col]) and releases. For a
+/// multi-cell piece pass the middle of its footprint (e.g. 0.5, 0.5 for a
+/// 2×2 whose top-left cell is (0, 0)). With [settle] false it pumps only one
+/// frame after release, so effects that start on the drop are still running.
+Future<void> dragToCell(
+  WidgetTester tester,
+  int slot,
+  num row,
+  num col, {
+  bool settle = true,
+}) async {
   final board = tester.widget<BoardView>(find.byType(BoardView));
   final geometry = board.geometry;
   final target =
       tester.getTopLeft(find.byType(BoardView)) +
-      geometry.cellRect(row, col).center +
+      geometry.cellRect(0, 0).center +
+      Offset(col * geometry.step, row * geometry.step) +
       Offset(0, dragLiftCells * geometry.step);
   final start = tester.getCenter(slots.at(slot));
   final gesture = await tester.startGesture(start);
@@ -72,8 +90,16 @@ Future<void> dragToCell(WidgetTester tester, int slot, int row, int col) async {
   await gesture.moveTo(target);
   await tester.pump(const Duration(milliseconds: 200));
   await gesture.up();
-  await tester.pumpAndSettle();
+  if (settle) {
+    await tester.pumpAndSettle();
+  } else {
+    await tester.pump();
+  }
 }
+
+ClearEffectsController effectsOf(WidgetTester tester) => tester
+    .widget<ClearEffectsOverlay>(find.byType(ClearEffectsOverlay))
+    .controller;
 
 void main() {
   for (final size in phoneSizes) {
@@ -275,5 +301,95 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(GameScreen), findsNothing);
     expect(find.text('go'), findsOneWidget);
+  });
+
+  testWidgets('sounds and haptics follow placements and clears', (
+    tester,
+  ) async {
+    final audio = RecordingAudio();
+    final haptics = RecordingHaptics();
+    await pumpScreen(
+      tester,
+      const Size(375, 667),
+      newGame: oneLineFromClearing,
+      audio: audio,
+      haptics: haptics,
+    );
+    await dragToCell(tester, 1, 0.5, 0.5); // a 2×2 square: no clear
+    expect(audio.events, ['place']);
+    expect(haptics.placements, [(lines: 0, combo: 0)]);
+
+    await dragToCell(tester, 0, 7, 7); // the single completes row 7
+    expect(audio.events, ['place', 'place', 'clear_1']);
+    expect(haptics.placements.last, (lines: 1, combo: 1));
+  });
+
+  testWidgets('a clear plays an overlay that never blocks the next drag', (
+    tester,
+  ) async {
+    await pumpScreen(
+      tester,
+      const Size(375, 667),
+      newGame: oneLineFromClearing,
+    );
+    final effects = effectsOf(tester);
+    expect(effects.isActive, isFalse);
+
+    await dragToCell(tester, 0, 7, 7, settle: false);
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(effects.isActive, isTrue);
+    expect(effects.particles.activeCount, greaterThan(0));
+    final scoreAfterClear = scoreOf(tester);
+
+    // Mid-effect, the next drag works at once.
+    await dragToCell(tester, 1, 0.5, 0.5, settle: false);
+    expect(effects.isActive, isTrue);
+    expect(int.parse(scoreOf(tester)), greaterThan(int.parse(scoreAfterClear)));
+
+    // And the overlay finishes on its own and stops its ticker.
+    await tester.pumpAndSettle();
+    expect(effects.isActive, isFalse);
+    expect(effects.particles.activeCount, 0);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('reduced motion skips particles and keeps a simple fade', (
+    tester,
+  ) async {
+    tester.platformDispatcher.accessibilityFeaturesTestValue =
+        const FakeAccessibilityFeatures(disableAnimations: true);
+    addTearDown(tester.platformDispatcher.clearAccessibilityFeaturesTestValue);
+    await pumpScreen(
+      tester,
+      const Size(375, 667),
+      newGame: oneLineFromClearing,
+    );
+    final effects = effectsOf(tester);
+
+    await dragToCell(tester, 0, 7, 7, settle: false);
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(effects.isActive, isTrue); // the fade is running
+    expect(effects.particles.activeCount, 0);
+
+    await tester.pumpAndSettle(); // the fade ends on its own
+    expect(effects.isActive, isFalse);
+  });
+
+  testWidgets('restart clears a running effect', (tester) async {
+    await pumpScreen(
+      tester,
+      const Size(375, 667),
+      newGame: oneLineFromClearing,
+    );
+    final effects = effectsOf(tester);
+    await dragToCell(tester, 0, 7, 7, settle: false);
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(effects.isActive, isTrue);
+
+    await tester.tap(find.byTooltip('Menu'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('RESTART'));
+    await tester.pumpAndSettle();
+    expect(effects.isActive, isFalse);
   });
 }

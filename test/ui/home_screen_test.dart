@@ -53,6 +53,7 @@ void main() {
     final storage = await makeStorage();
     await tester.pumpWidget(MaterialApp(home: HomeScreen(storage: storage)));
     await tester.tap(find.text('LIGHTS OUT →'));
+    await tester.pump(const Duration(seconds: 3)); // the start lights
     await tester.pumpAndSettle();
     expect(find.byType(GameScreen), findsOneWidget);
 

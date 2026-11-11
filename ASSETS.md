@@ -32,3 +32,14 @@ Original artwork made for this project (no third-party source or license). Sourc
 | `splash-mark-1024.png` | Launch screen mark on `#0A0C10` (iOS, Android, Android 12+) |
 
 Generated native files come from the dev-only tools `flutter_launcher_icons` and `flutter_native_splash` (not shipped in the app). The iOS `LaunchImage*.png` files were then resized to 112/224/336 px so the mark is 112 pt wide; re-run that resize if the splash is regenerated.
+
+## Sound effects
+
+Original sounds, synthesized by `tool/gen_sounds.py` (Python 3 standard library only, fixed random seed, so re-running reproduces the same files). No third-party audio. 44.1 kHz, 16-bit mono, peaks at -4.5 dBFS, 5 ms fades at both ends.
+
+| File | Use |
+| --- | --- |
+| `assets/sfx/place.wav` | Piece placement click (~40 ms) |
+| `assets/sfx/clear_1.wav` … `clear_6.wav` | Engine-rev line clear (~250 ms); each step higher in pitch, for combos 1 to 6+ |
+| `assets/sfx/light.wav` | Start-light beep (~120 ms) |
+| `assets/sfx/lights_out.wav` | Lights-out whoosh (~400 ms) |

@@ -3,14 +3,19 @@ import 'dart:ui' as ui;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
+import '../game/board.dart';
 import '../game/game_state.dart';
 import '../game/piece.dart';
+import '../services/audio_service.dart';
+import '../services/haptics_service.dart';
 import '../services/storage_service.dart';
 import '../theme/themes.dart';
 import 'block_painter.dart';
 import 'board_geometry.dart';
 import 'board_view.dart';
 import 'combo_popup.dart';
+import 'effects/clear_effects.dart';
+import 'effects/cleared_cells.dart';
 import 'game_over_screen.dart';
 import 'popup_text.dart';
 import 'tray_view.dart';
@@ -171,11 +176,17 @@ class GameScreen extends StatefulWidget {
   /// position.
   final GameState Function() newGame;
 
+  /// Sounds and haptics; silent when omitted (tests).
+  final AudioService? audio;
+  final HapticsService? haptics;
+
   const GameScreen({
     super.key,
     required this.storage,
     this.theme = nightRace,
     this.newGame = GameState.new,
+    this.audio,
+    this.haptics,
   });
 
   @override
@@ -184,6 +195,14 @@ class GameScreen extends StatefulWidget {
 
 class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   late GameState _game = widget.newGame();
+  late final AudioService _audio = widget.audio ?? AudioService.silent();
+  late final HapticsService _haptics =
+      widget.haptics ?? HapticsService.silent();
+
+  /// Line-clear overlay; purely visual, never blocks input.
+  late final ClearEffectsController _effects = ClearEffectsController(
+    vsync: this,
+  );
 
   // Run bookkeeping. `_runRecorded` makes sure a finished run is booked once,
   // however often the screen rebuilds.
@@ -254,6 +273,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     _hiddenSlot.dispose();
     _popup.dispose();
     _flashCtl.dispose();
+    _effects.dispose();
     super.dispose();
   }
 
@@ -351,11 +371,14 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     final target = _lastTarget;
     if (target != null && _ghost.value != null) {
       final slot = s.slot;
+      final piece = s.piece;
+      // Cleared cells are gone once placed; keep their colors for the effect.
+      final before = _game.board.copy();
       _endDrag();
       late PlacementResult result;
       setState(() => result = _game.place(slot, target.row, target.col));
       _boardTick.value++;
-      _afterPlacement(result);
+      _afterPlacement(result, before, piece, target);
     } else {
       _beginReturn(s);
     }
@@ -397,7 +420,34 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     _hiddenSlot.value = null;
   }
 
-  void _afterPlacement(PlacementResult result) {
+  void _afterPlacement(
+    PlacementResult result,
+    Board before,
+    Piece piece,
+    TargetCell target,
+  ) {
+    final lines = result.clearedRows.length + result.clearedCols.length;
+    _audio.playPlace();
+    _haptics.onPlacement(linesCleared: lines, comboAfter: result.comboAfter);
+    if (lines > 0) {
+      _audio.playClear(result.comboAfter);
+      _effects.trigger(
+        cells: clearedCellsOf(
+          before: before,
+          piece: piece,
+          row: target.row,
+          col: target.col,
+          clearedRows: result.clearedRows,
+          clearedCols: result.clearedCols,
+        ),
+        rows: result.clearedRows,
+        cols: result.clearedCols,
+        geometry: _geometry,
+        theme: widget.theme,
+        reducedMotion: MediaQuery.disableAnimationsOf(context),
+      );
+    }
+
     final text = popupFor(result);
     if (text != null) _popup.value = PopupEvent(++_popupId, text);
 
@@ -420,6 +470,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       _flashed = false;
       _bestAtStart = widget.storage.bestScore;
     });
+    _effects.clear();
     _flashCtl.value = 0;
     _boardTick.value++;
   }
@@ -496,12 +547,23 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                             key: _boardKey,
                             width: _geometry.panelWidth,
                             height: _geometry.panelHeight,
-                            child: BoardView(
-                              game: _game,
-                              theme: theme,
-                              geometry: _geometry,
-                              repaint: _boardTick,
-                              ghost: _ghost,
+                            child: Stack(
+                              clipBehavior: Clip.none,
+                              children: [
+                                BoardView(
+                                  game: _game,
+                                  theme: theme,
+                                  geometry: _geometry,
+                                  repaint: _boardTick,
+                                  ghost: _ghost,
+                                ),
+                                Positioned.fill(
+                                  child: ClearEffectsOverlay(
+                                    controller: _effects,
+                                    geometry: _geometry,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ),

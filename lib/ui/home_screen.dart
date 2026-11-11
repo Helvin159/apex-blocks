@@ -2,6 +2,8 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../services/audio_service.dart';
+import '../services/haptics_service.dart';
 import '../services/storage_service.dart';
 import '../theme/themes.dart';
 import 'block_painter.dart';
@@ -19,72 +21,137 @@ const double _logoTiltDegrees = -8;
 String _withCommas(int n) =>
     n.toString().replaceAllMapped(RegExp(r'\B(?=(\d{3})+(?!\d))'), (_) => ',');
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   final StorageService storage;
   final ApexTheme theme;
+  final AudioService? audio;
+  final HapticsService? haptics;
 
-  const HomeScreen({super.key, required this.storage, this.theme = nightRace});
+  /// Randomizes the start-light hold; tests pass a seeded one.
+  final math.Random? random;
 
-  void _startRun(BuildContext context) {
-    Navigator.of(context).push(
+  const HomeScreen({
+    super.key,
+    required this.storage,
+    this.theme = nightRace,
+    this.audio,
+    this.haptics,
+    this.random,
+  });
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  late final AudioService _audio = widget.audio ?? AudioService.silent();
+  late final HapticsService _haptics =
+      widget.haptics ?? HapticsService.silent();
+  late final StartSequence _sequence = StartSequence(
+    audio: _audio,
+    random: widget.random,
+    onLit: (count) => setState(() => _litPods = count),
+    onGo: _startRun,
+  );
+
+  /// Pods currently lit; all of them when idle.
+  int _litPods = gantryPods;
+
+  @override
+  void dispose() {
+    _sequence.dispose();
+    super.dispose();
+  }
+
+  Future<void> _startRun() async {
+    setState(() {}); // drops the tap-to-skip layer
+    await Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => GameScreen(storage: storage, theme: theme),
+        builder: (_) => GameScreen(
+          storage: widget.storage,
+          theme: widget.theme,
+          audio: _audio,
+          haptics: _haptics,
+        ),
       ),
     );
+    if (mounted) setState(() => _litPods = gantryPods);
   }
 
   @override
   Widget build(BuildContext context) {
+    final theme = widget.theme;
+    final storage = widget.storage;
     return Scaffold(
       backgroundColor: theme.background,
-      body: ListenableBuilder(
-        listenable: storage,
-        builder: (context, _) => Column(
-          children: [
-            Expanded(
-              child: SafeArea(
-                bottom: false,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(
-                    _screenPadding,
-                    12,
-                    _screenPadding,
-                    12,
-                  ),
-                  child: Column(
-                    children: [
-                      Text(
-                        'ROUND ${storage.gamesPlayed + 1} · NIGHT RACE',
-                        style: TextStyle(
-                          fontFamily: 'Inter',
-                          fontVariations: const [FontVariation('wght', 600)],
-                          fontSize: 11,
-                          letterSpacing: 1.8,
-                          color: theme.muted,
-                        ),
+      body: Stack(
+        children: [
+          ListenableBuilder(
+            listenable: storage,
+            builder: (context, _) => Column(
+              children: [
+                Expanded(
+                  child: SafeArea(
+                    bottom: false,
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(
+                        _screenPadding,
+                        12,
+                        _screenPadding,
+                        12,
                       ),
-                      Expanded(
-                        child: Center(child: _Logo(theme: theme)),
+                      child: Column(
+                        children: [
+                          Text(
+                            'ROUND ${storage.gamesPlayed + 1} · NIGHT RACE',
+                            style: TextStyle(
+                              fontFamily: 'Inter',
+                              fontVariations: const [
+                                FontVariation('wght', 600),
+                              ],
+                              fontSize: 11,
+                              letterSpacing: 1.8,
+                              color: theme.muted,
+                            ),
+                          ),
+                          Expanded(
+                            child: Center(child: _Logo(theme: theme)),
+                          ),
+                          StartLightGantry(theme: theme, litPods: _litPods),
+                          const SizedBox(height: 14),
+                          _LightsOutButton(
+                            theme: theme,
+                            onTap: _sequence.start,
+                          ),
+                          const SizedBox(height: 12),
+                          _PoleCard(theme: theme, best: storage.bestScore),
+                          const SizedBox(height: 12),
+                          _LiveryRow(
+                            theme: theme,
+                            career: storage.careerPoints,
+                          ),
+                        ],
                       ),
-                      StartLightGantry(theme: theme),
-                      const SizedBox(height: 14),
-                      _LightsOutButton(
-                        theme: theme,
-                        onTap: () => _startRun(context),
-                      ),
-                      const SizedBox(height: 12),
-                      _PoleCard(theme: theme, best: storage.bestScore),
-                      const SizedBox(height: 12),
-                      _LiveryRow(theme: theme, career: storage.careerPoints),
-                    ],
+                    ),
                   ),
                 ),
+                CheckeredStrip(
+                  dark: theme.background,
+                  height: _checkerStripHeight,
+                ),
+                SizedBox(height: MediaQuery.paddingOf(context).bottom),
+              ],
+            ),
+          ),
+          // While the lights run, any tap skips straight to the race.
+          if (_sequence.isRunning)
+            Positioned.fill(
+              child: Listener(
+                behavior: HitTestBehavior.opaque,
+                onPointerDown: (_) => _sequence.skip(),
               ),
             ),
-            CheckeredStrip(dark: theme.background, height: _checkerStripHeight),
-            SizedBox(height: MediaQuery.paddingOf(context).bottom),
-          ],
-        ),
+        ],
       ),
     );
   }
