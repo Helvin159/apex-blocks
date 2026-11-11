@@ -9,7 +9,13 @@ const int clearVariantCount = 6;
 const int placePlayers = 4;
 const int clearPlayers = 2;
 const int lightPlayers = 2;
-const int lightsOutPlayers = 1;
+const int passbyPlayers = 1;
+
+/// Per-sound volume (0 to 1). The pass-by is loudest in the mix but kept
+/// below full scale so it is never painful on a phone speaker.
+const double placeVolume = 0.7;
+const double chimeVolume = 0.8;
+const double passbyVolume = 0.65;
 
 /// Which clear sound (1 to [clearVariantCount]) to play for a placement whose
 /// combo count afterwards is [comboAfter].
@@ -49,11 +55,12 @@ class AudioService {
       );
       await AudioPlayer.global.setAudioContext(context);
       await Future.wait([
-        _load('place', placePlayers, context),
+        _load('place', placePlayers, context, placeVolume),
         for (var i = 1; i <= clearVariantCount; i++)
-          _load('clear_$i', clearPlayers, context),
-        _load('light', lightPlayers, context),
-        _load('lights_out', lightsOutPlayers, context),
+          _load('clear_$i', clearPlayers, context, chimeVolume),
+        _load('light', lightPlayers, context, 1.0),
+        _load('passby_full', passbyPlayers, context, passbyVolume),
+        _load('passby_short', passbyPlayers, context, passbyVolume),
       ]);
       _ready = true;
     } catch (e, st) {
@@ -61,8 +68,18 @@ class AudioService {
     }
   }
 
-  Future<void> _load(String name, int players, AudioContext context) async {
-    final pool = _SoundPool(AssetSource('sfx/$name.wav'), players, context);
+  Future<void> _load(
+    String name,
+    int players,
+    AudioContext context,
+    double volume,
+  ) async {
+    final pool = _SoundPool(
+      AssetSource('sfx/$name.wav'),
+      players,
+      context,
+      volume,
+    );
     await pool.load();
     _pools[name] = pool;
   }
@@ -78,7 +95,28 @@ class AudioService {
 
   void playLight() => _play('light');
 
-  void playLightsOut() => _play('lights_out');
+  /// The full car fly-by, when the lights go out.
+  void playPassbyFull() {
+    notePassby();
+    _play('passby_full');
+  }
+
+  /// The short fly-by for big moments.
+  void playPassbyShort() {
+    notePassby();
+    _play('passby_short');
+  }
+
+  DateTime? _lastPassby;
+
+  /// Records that a pass-by is playing now (for the cooldown).
+  @protected
+  void notePassby() => _lastPassby = DateTime.now();
+
+  /// Milliseconds since a pass-by last played, or null if none has.
+  int? get msSincePassby => _lastPassby == null
+      ? null
+      : DateTime.now().difference(_lastPassby!).inMilliseconds;
 
   Future<void> dispose() async {
     enabled.dispose();
@@ -93,10 +131,11 @@ class _SoundPool {
   final Source source;
   final int size;
   final AudioContext context;
+  final double volume;
   final List<AudioPlayer> _players = [];
   int _next = 0;
 
-  _SoundPool(this.source, this.size, this.context);
+  _SoundPool(this.source, this.size, this.context, this.volume);
 
   Future<void> load() async {
     for (var i = 0; i < size; i++) {
@@ -104,6 +143,7 @@ class _SoundPool {
       await player.setPlayerMode(PlayerMode.lowLatency);
       await player.setAudioContext(context);
       await player.setReleaseMode(ReleaseMode.stop);
+      await player.setVolume(volume);
       await player.setSource(source);
       _players.add(player);
     }

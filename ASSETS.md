@@ -40,6 +40,7 @@ Original sounds, synthesized by `tool/gen_sounds.py` (Python 3 standard library 
 | File | Use |
 | --- | --- |
 | `assets/sfx/place.wav` | Piece placement click (~40 ms) |
-| `assets/sfx/clear_1.wav` … `clear_6.wav` | Engine-rev line clear (~250 ms); each step higher in pitch, for combos 1 to 6+ |
+| `assets/sfx/clear_1.wav` … `clear_6.wav` | Bell chime line clear (~600 ms); each step higher in pitch, for combos 1 to 6+ |
 | `assets/sfx/light.wav` | Start-light beep (~120 ms) |
-| `assets/sfx/lights_out.wav` | Lights-out whoosh (~400 ms) |
+| `assets/sfx/passby_full.wav` | Single-seater fly-by at top speed (~1.8 s), plays when the lights go out |
+| `assets/sfx/passby_short.wav` | Short fly-by (~0.9 s), plays on FASTEST LAP! and the first Pole pass |

@@ -54,8 +54,8 @@ class _HomeScreenState extends State<HomeScreen> {
     onGo: _startRun,
   );
 
-  /// Pods currently lit; all of them when idle.
-  int _litPods = gantryPods;
+  /// Pods currently lit; none when idle.
+  int _litPods = 0;
 
   @override
   void dispose() {
@@ -75,7 +75,7 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       ),
     );
-    if (mounted) setState(() => _litPods = gantryPods);
+    if (mounted) setState(() => _litPods = 0);
   }
 
   @override

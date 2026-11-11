@@ -26,9 +26,9 @@ int lit(WidgetTester tester) =>
 const step = Duration(milliseconds: lightStepMs);
 
 void main() {
-  testWidgets('idle: all pods lit, no sound', (tester) async {
+  testWidgets('idle: all pods unlit, no sound', (tester) async {
     final audio = await pumpHome(tester);
-    expect(lit(tester), gantryPods);
+    expect(lit(tester), 0);
     expect(audio.events, isEmpty);
   });
 
@@ -52,7 +52,7 @@ void main() {
       // Held for at least holdMinMs: still lit, no whoosh, no race.
       await tester.pump(const Duration(milliseconds: holdMinMs - 1));
       expect(lit(tester), gantryPods);
-      expect(audio.events, isNot(contains('lights_out')));
+      expect(audio.events, isNot(contains('passby_full')));
       expect(find.byType(GameScreen), findsNothing);
 
       // By holdMaxMs the lights are out with the whoosh.
@@ -60,14 +60,14 @@ void main() {
         const Duration(milliseconds: holdMaxMs - holdMinMs + 1),
       );
       expect(lit(tester), 0);
-      expect(audio.events.last, 'lights_out');
+      expect(audio.events.last, 'passby_full');
       expect(find.byType(GameScreen), findsNothing);
 
       // The race starts after the beat.
       await tester.pump(const Duration(milliseconds: goDelayMs));
       await tester.pumpAndSettle();
       expect(find.byType(GameScreen), findsOneWidget);
-      expect(audio.events.where((e) => e == 'lights_out').length, 1);
+      expect(audio.events.where((e) => e == 'passby_full').length, 1);
     },
   );
 
@@ -82,8 +82,8 @@ void main() {
     await tester.tapAt(const Offset(100, 300));
     await tester.pumpAndSettle();
     expect(find.byType(GameScreen), findsOneWidget);
-    // No whoosh, and no further beeps after the skip.
-    expect(audio.events, List.filled(3, 'light'));
+    // The pass-by plays on the skip, and no further beeps follow.
+    expect(audio.events, [...List.filled(3, 'light'), 'passby_full']);
     expect(tester.takeException(), isNull);
   });
 
@@ -100,7 +100,7 @@ void main() {
     expect(audio.events.where((e) => e == 'light').length, 2);
   });
 
-  testWidgets('the gantry is lit again after coming back from the race', (
+  testWidgets('the gantry is unlit again after coming back from the race', (
     tester,
   ) async {
     await pumpHome(tester);
@@ -115,7 +115,7 @@ void main() {
     await tester.tap(find.text('GARAGE'));
     await tester.pumpAndSettle();
     expect(find.byType(GameScreen), findsNothing);
-    expect(lit(tester), gantryPods);
+    expect(lit(tester), 0);
 
     // And it can run again.
     await tester.tap(find.text('LIGHTS OUT →'));

@@ -109,7 +109,7 @@ class _GantryPainter extends CustomPainter {
 }
 
 /// The start sequence: pods light one at a time with a beep each, hold for a
-/// random time, then all go out with a whoosh and the race starts.
+/// random time, then all go out together with the pass-by and the race starts.
 ///
 /// Runs on timers, so it is testable with fake async. [skip] jumps straight
 /// to the race.
@@ -125,6 +125,7 @@ class StartSequence {
 
   Timer? _timer;
   bool _running = false;
+  bool _lightsWentOut = false;
 
   StartSequence({
     required this.audio,
@@ -138,6 +139,7 @@ class StartSequence {
   void start() {
     if (_running) return;
     _running = true;
+    _lightsWentOut = false;
     _lightPod(1);
   }
 
@@ -157,7 +159,8 @@ class StartSequence {
 
   void _lightsOut() {
     onLit(0);
-    audio.playLightsOut();
+    _lightsWentOut = true;
+    audio.playPassbyFull();
     _timer = Timer(const Duration(milliseconds: goDelayMs), _go);
   }
 
@@ -167,11 +170,13 @@ class StartSequence {
     onGo();
   }
 
-  /// Cancels the sequence and starts the race now (no whoosh).
+  /// Cancels the sequence and starts the race now. The pass-by still plays,
+  /// unless the lights had already gone out.
   void skip() {
     if (!_running) return;
     _timer?.cancel();
     onLit(0);
+    if (!_lightsWentOut) audio.playPassbyFull();
     _go();
   }
 

@@ -23,7 +23,8 @@ void main() {
         ..playPlace()
         ..playClear(3)
         ..playLight()
-        ..playLightsOut();
+        ..playPassbyFull()
+        ..playPassbyShort();
       await audio.dispose();
     },
   );

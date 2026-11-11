@@ -7,14 +7,15 @@ import 'package:flutter_test/flutter_test.dart';
 /// (file, min ms, max ms)
 const _expected = <(String, int, int)>[
   ('place.wav', 35, 45),
-  ('clear_1.wav', 240, 260),
-  ('clear_2.wav', 240, 260),
-  ('clear_3.wav', 240, 260),
-  ('clear_4.wav', 240, 260),
-  ('clear_5.wav', 240, 260),
-  ('clear_6.wav', 240, 260),
+  ('clear_1.wav', 590, 610),
+  ('clear_2.wav', 590, 610),
+  ('clear_3.wav', 590, 610),
+  ('clear_4.wav', 590, 610),
+  ('clear_5.wav', 590, 610),
+  ('clear_6.wav', 590, 610),
   ('light.wav', 110, 130),
-  ('lights_out.wav', 390, 410),
+  ('passby_full.wav', 1700, 1900),
+  ('passby_short.wav', 850, 950),
 ];
 
 void main() {

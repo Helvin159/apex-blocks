@@ -8,6 +8,7 @@ import '../game/game_state.dart';
 import '../game/piece.dart';
 import '../services/audio_service.dart';
 import '../services/haptics_service.dart';
+import '../services/sound_plan.dart';
 import '../services/storage_service.dart';
 import '../theme/themes.dart';
 import 'block_painter.dart';
@@ -427,10 +428,18 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     TargetCell target,
   ) {
     final lines = result.clearedRows.length + result.clearedCols.length;
+    final plan = soundPlanFor(
+      result: result,
+      scoreAfter: _game.score,
+      poleBefore: _bestAtStart,
+      polePassedAlready: _flashed,
+      msSinceLastPassby: _audio.msSincePassby,
+    );
     _audio.playPlace();
     _haptics.onPlacement(linesCleared: lines, comboAfter: result.comboAfter);
+    if (plan.chimeVariant != null) _audio.playClear(result.comboAfter);
+    if (plan.passby) _audio.playPassbyShort();
     if (lines > 0) {
-      _audio.playClear(result.comboAfter);
       _effects.trigger(
         cells: clearedCellsOf(
           before: before,

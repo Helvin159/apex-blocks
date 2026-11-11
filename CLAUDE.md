@@ -84,8 +84,8 @@ Rounded squares (radius ~6 on board, ~4 small) with a vertical 3-stop gradient, 
 ### Home screen
 - Top: small "ROUND N · NIGHT RACE" label, settings button top right.
 - Logo: a tilted 2×2 block cluster above the "APEX / BLOCKS" wordmark (Barlow Condensed, italic, 800; second word in accent red), tagline "ENDLESS BLOCK RACING".
-- Start-light gantry: 5 pods with 2 lit red lights each.
-- Big "LIGHTS OUT →" button (accent red) starts a run. On tap, play the start sequence: the lights fill one pod at a time, then go out, then gameplay starts.
+- Start-light gantry: 5 pods, UNLIT at rest. On LIGHTS OUT they light one at a time, hold for a random moment, then ALL go out together (a real standing start), and the race begins.
+- Big "LIGHTS OUT →" button (accent red) starts a run with the start-light sequence above.
 - Pole card: purple "POLE" chip + best score in large purple numbers.
 - Liveries row: 3 cards (Night Race, Rain Race, Desert Dusk), each showing a mini 2×2 block preview; the equipped one has an accent border.
 - Bottom: "SETUP" and "CLEAN AIR · NO ADS" buttons, then a checkered strip along the bottom edge.
@@ -111,7 +111,10 @@ Rounded squares (radius ~6 on board, ~4 small) with a vertical 3-stop gradient, 
 
 ### Effects, sound, haptics
 - Clears: a white speed streak sweeps across the line, blocks burst into sparks plus a little gray tyre smoke, then vanish.
-- Sound (generated with jsfxr/ChipTone, CC0 or self-made): placement click, an engine-rev clear sound that rises in pitch with combo, a start-light beep per light, a lights-out whoosh.
+- Sound: all original, synthesized by `tool/gen_sounds.py` (nothing sampled or downloaded). Two layers:
+  - Every clear: a bell chime that climbs a pentatonic scale per combo step (`clear_1` … `clear_6`).
+  - Big moments: a stylized V6 turbo single-seater flying past at top speed. `passby_full` plays when the lights go out; `passby_short` plays on FASTEST LAP! (3+ lines) and the first time a run passes Pole (only if Pole > 0), at most once per `PASSBY_COOLDOWN_MS`, never twice for the same move.
+  - Also: placement click, a start-light beep per light.
 - Haptics: light on placement, medium on clears, a "rumble strip" pattern (several quick light pulses) on combos of 3+.
 
 ### Liveries (themes)

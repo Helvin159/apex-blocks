@@ -62,7 +62,16 @@ class RecordingAudio extends AudioService {
   void playLight() => events.add('light');
 
   @override
-  void playLightsOut() => events.add('lights_out');
+  void playPassbyFull() {
+    notePassby();
+    events.add('passby_full');
+  }
+
+  @override
+  void playPassbyShort() {
+    notePassby();
+    events.add('passby_short');
+  }
 }
 
 /// A [HapticsService] that records placements.
