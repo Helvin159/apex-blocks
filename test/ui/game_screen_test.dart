@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:apexblocks/theme/themes.dart';
 import 'package:apexblocks/ui/board_geometry.dart';
 import 'package:apexblocks/ui/board_view.dart';
 import 'package:apexblocks/game/game_state.dart';
@@ -149,6 +150,22 @@ void main() {
     await dragToBoardCenter(tester, 1);
     expect(scoreOf(tester), isNot('0'));
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('equipping a livery recolors the board\'s empty cells', (
+    tester,
+  ) async {
+    final storage = await pumpScreen(
+      tester,
+      const Size(375, 667),
+      prefs: {'careerPoints': 5000},
+    );
+    Color emptyCell() =>
+        tester.widget<BoardView>(find.byType(BoardView)).theme.emptyCell;
+    expect(emptyCell(), nightRace.emptyCell);
+    await storage.selectLivery(1);
+    await tester.pump();
+    expect(emptyCell(), rainRace.emptyCell);
   });
 
   testWidgets('header: 44px menu button, score and pole boxes', (tester) async {

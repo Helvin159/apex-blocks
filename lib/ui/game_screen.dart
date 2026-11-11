@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../game/board.dart';
 import '../game/game_state.dart';
 import '../game/piece.dart';
+import '../game/unlocks.dart';
 import '../services/audio_service.dart';
 import '../services/haptics_service.dart';
 import '../services/sound_plan.dart';
@@ -19,6 +20,7 @@ import 'effects/clear_effects.dart';
 import 'effects/cleared_cells.dart';
 import 'game_over_screen.dart';
 import 'popup_text.dart';
+import 'setup_sheet.dart';
 import 'tray_view.dart';
 
 /// Time for a lifted piece to grow from tray size to board-cell size.
@@ -171,7 +173,6 @@ class _DragPainter extends CustomPainter {
 
 class GameScreen extends StatefulWidget {
   final StorageService storage;
-  final ApexTheme theme;
 
   /// Builds the game for each run; tests use it to start from a crafted
   /// position.
@@ -184,7 +185,6 @@ class GameScreen extends StatefulWidget {
   const GameScreen({
     super.key,
     required this.storage,
-    this.theme = nightRace,
     this.newGame = GameState.new,
     this.audio,
     this.haptics,
@@ -195,6 +195,9 @@ class GameScreen extends StatefulWidget {
 }
 
 class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
+  /// The equipped livery; the build listens to storage so it follows changes.
+  ApexTheme get _theme => widget.storage.theme;
+
   late GameState _game = widget.newGame();
   late final AudioService _audio = widget.audio ?? AudioService.silent();
   late final HapticsService _haptics =
@@ -210,6 +213,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   bool _runRecorded = false;
   late int _bestAtStart = widget.storage.bestScore;
   int _previousBest = 0;
+  List<int> _newLiveries = const [];
   bool _flashed = false;
   final ValueNotifier<PopupEvent?> _popup = ValueNotifier(null);
   int _popupId = 0;
@@ -315,7 +319,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     _entry = OverlayEntry(
       builder: (_) => Positioned.fill(
         child: IgnorePointer(
-          child: CustomPaint(painter: _DragPainter(session, widget.theme)),
+          child: CustomPaint(painter: _DragPainter(session, _theme)),
         ),
       ),
     );
@@ -452,7 +456,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         rows: result.clearedRows,
         cols: result.clearedCols,
         geometry: _geometry,
-        theme: widget.theme,
+        theme: _theme,
         reducedMotion: MediaQuery.disableAnimationsOf(context),
       );
     }
@@ -468,6 +472,8 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     if (result.gameOver && !_runRecorded) {
       _runRecorded = true;
       _previousBest = widget.storage.bestScore;
+      final careerBefore = widget.storage.careerPoints;
+      _newLiveries = newlyUnlocked(careerBefore, careerBefore + _game.score);
       widget.storage.recordRun(_game.score);
     }
   }
@@ -477,6 +483,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       _game = widget.newGame();
       _runRecorded = false;
       _flashed = false;
+      _newLiveries = const [];
       _bestAtStart = widget.storage.bestScore;
     });
     _effects.clear();
@@ -490,11 +497,19 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     if (_session != null || _game.isGameOver) return;
     final choice = await showModalBottomSheet<_MenuChoice>(
       context: context,
-      backgroundColor: widget.theme.panel,
+      backgroundColor: _theme.panel,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
-      builder: (_) => _PauseSheet(theme: widget.theme),
+      builder: (_) => _PauseSheet(
+        theme: _theme,
+        onSetup: () => showSetupSheet(
+          context,
+          storage: widget.storage,
+          audio: _audio,
+          haptics: _haptics,
+        ),
+      ),
     );
     if (!mounted) return;
     switch (choice) {
@@ -508,8 +523,11 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   }
 
   @override
-  Widget build(BuildContext context) {
-    final theme = widget.theme;
+  Widget build(BuildContext context) =>
+      ListenableBuilder(listenable: widget.storage, builder: _buildScreen);
+
+  Widget _buildScreen(BuildContext context, Widget? _) {
+    final theme = _theme;
     return Scaffold(
       backgroundColor: theme.background,
       body: SafeArea(
@@ -601,6 +619,9 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                       piecesPlaced: _game.piecesPlaced,
                       onNewRace: _restart,
                       onGarage: _garage,
+                      newLiveries: _newLiveries,
+                      equippedLivery: widget.storage.selectedLivery,
+                      onEquip: widget.storage.selectLivery,
                     ),
                   ),
               ],
@@ -780,8 +801,9 @@ enum _MenuChoice { resume, restart, garage }
 
 class _PauseSheet extends StatelessWidget {
   final ApexTheme theme;
+  final VoidCallback onSetup;
 
-  const _PauseSheet({required this.theme});
+  const _PauseSheet({required this.theme, required this.onSetup});
 
   @override
   Widget build(BuildContext context) {
@@ -803,6 +825,8 @@ class _PauseSheet extends StatelessWidget {
               color: theme.highlight,
               onTap: () => Navigator.pop(context, _MenuChoice.restart),
             ),
+            const SizedBox(height: 10),
+            _SheetButton(label: 'SETUP', color: theme.text, onTap: onSetup),
             const SizedBox(height: 10),
             _SheetButton(
               label: 'GARAGE',

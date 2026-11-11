@@ -26,6 +26,30 @@ Widget screen({
 );
 
 void main() {
+  testWidgets('shows LIVERY UNLOCKED with an Equip button', (tester) async {
+    useScreen(tester, const Size(375, 667));
+    int? equipped;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: GameOverScreen(
+          theme: nightRace,
+          score: 120,
+          previousBest: 200,
+          linesCleared: 1,
+          bestCombo: 1,
+          piecesPlaced: 3,
+          onNewRace: () {},
+          onGarage: () {},
+          newLiveries: const [1],
+          onEquip: (i) => equipped = i,
+        ),
+      ),
+    );
+    expect(find.text('LIVERY UNLOCKED · RAIN RACE'), findsOneWidget);
+    await tester.tap(find.text('Equip'));
+    expect(equipped, 1);
+  });
+
   for (final size in phoneSizes) {
     testWidgets('fits $size', (tester) async {
       useScreen(tester, size);

@@ -1,4 +1,5 @@
 import 'package:apexblocks/services/storage_service.dart';
+import 'package:apexblocks/theme/themes.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -64,5 +65,36 @@ void main() {
     s.addListener(() => calls++);
     await s.recordRun(10);
     expect(calls, 1);
+  });
+
+  test(
+    'livery and toggles default to Night Race, sound on, haptics on',
+    () async {
+      final s = await open();
+      expect(s.selectedLivery, 0);
+      expect(s.theme, nightRace);
+      expect(s.soundOn, isTrue);
+      expect(s.hapticsOn, isTrue);
+    },
+  );
+
+  test('livery and toggles survive a relaunch', () async {
+    final s = await open({'careerPoints': 20000});
+    expect(await s.selectLivery(2), isTrue);
+    await s.setSoundOn(false);
+    await s.setHapticsOn(false);
+    final r = await StorageService.open(await SharedPreferences.getInstance());
+    expect(r.selectedLivery, 2);
+    expect(r.theme, desertDusk);
+    expect(r.soundOn, isFalse);
+    expect(r.hapticsOn, isFalse);
+  });
+
+  test('a locked livery cannot be equipped or loaded', () async {
+    final s = await open({'careerPoints': 100});
+    expect(await s.selectLivery(1), isFalse);
+    expect(s.selectedLivery, 0);
+    final saved = await open({'careerPoints': 100, 'selectedLivery': 2});
+    expect(saved.selectedLivery, 0);
   });
 }

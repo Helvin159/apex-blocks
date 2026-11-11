@@ -83,14 +83,14 @@ class _GantryPainter extends CustomPainter {
             c,
             lightR * 1.9,
             Paint()
-              ..color = theme.accent.withValues(alpha: 0.5)
+              ..color = startLightRed.withValues(alpha: 0.5)
               ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8),
           );
         }
         canvas.drawCircle(
           c,
           lightR,
-          Paint()..color = lit ? theme.accent : _unlit,
+          Paint()..color = lit ? startLightRed : _unlit,
         );
         if (lit) {
           canvas.drawCircle(

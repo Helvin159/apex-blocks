@@ -21,6 +21,13 @@ class GameOverScreen extends StatelessWidget {
   final VoidCallback onNewRace;
   final VoidCallback onGarage;
 
+  /// Liveries this run unlocked (indices into [allLiveries]).
+  final List<int> newLiveries;
+
+  /// The equipped livery, so an unlocked card can show it is already on.
+  final int equippedLivery;
+  final ValueChanged<int>? onEquip;
+
   /// Room for the Pit Stop button (milestone 6); nothing is shown when null.
   final Widget? pitStop;
 
@@ -34,6 +41,9 @@ class GameOverScreen extends StatelessWidget {
     required this.piecesPlaced,
     required this.onNewRace,
     required this.onGarage,
+    this.newLiveries = const [],
+    this.equippedLivery = 0,
+    this.onEquip,
     this.pitStop,
   });
 
@@ -78,6 +88,15 @@ class GameOverScreen extends StatelessWidget {
                       piecesPlaced: piecesPlaced,
                     ),
                     const SizedBox(height: 18),
+                    for (final i in newLiveries) ...[
+                      _LiveryUnlocked(
+                        theme: theme,
+                        name: allLiveries[i].name,
+                        equipped: equippedLivery == i,
+                        onEquip: () => onEquip?.call(i),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
                     if (pitStop != null) ...[
                       pitStop!,
                       const SizedBox(height: 12),
@@ -318,6 +337,65 @@ class _MenuButton extends StatelessWidget {
             letterSpacing: 1,
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// "LIVERY UNLOCKED · NAME" banner with an Equip button.
+class _LiveryUnlocked extends StatelessWidget {
+  final ApexTheme theme;
+  final String name;
+  final bool equipped;
+  final VoidCallback onEquip;
+
+  const _LiveryUnlocked({
+    required this.theme,
+    required this.name,
+    required this.equipped,
+    required this.onEquip,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 8, 8, 8),
+      decoration: BoxDecoration(
+        color: theme.panelAlt,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: theme.highlight),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              'LIVERY UNLOCKED · ${name.toUpperCase()}',
+              style: _display(20, theme.highlight),
+            ),
+          ),
+          const SizedBox(width: 8),
+          SizedBox(
+            height: 44,
+            child: FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: theme.accent,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+              onPressed: equipped ? null : onEquip,
+              child: Text(
+                equipped ? 'Equipped' : 'Equip',
+                style: const TextStyle(
+                  fontFamily: 'Inter',
+                  fontVariations: [FontVariation('wght', 700)],
+                  fontSize: 14,
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

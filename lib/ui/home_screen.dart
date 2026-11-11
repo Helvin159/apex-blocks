@@ -1,7 +1,9 @@
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import '../game/unlocks.dart';
 import '../services/audio_service.dart';
 import '../services/haptics_service.dart';
 import '../services/storage_service.dart';
@@ -9,6 +11,7 @@ import '../theme/themes.dart';
 import 'block_painter.dart';
 import 'checkered.dart';
 import 'game_screen.dart';
+import 'setup_sheet.dart';
 import 'start_lights.dart';
 
 const double _screenPadding = 20;
@@ -23,7 +26,6 @@ String _withCommas(int n) =>
 
 class HomeScreen extends StatefulWidget {
   final StorageService storage;
-  final ApexTheme theme;
   final AudioService? audio;
   final HapticsService? haptics;
 
@@ -33,7 +35,6 @@ class HomeScreen extends StatefulWidget {
   const HomeScreen({
     super.key,
     required this.storage,
-    this.theme = nightRace,
     this.audio,
     this.haptics,
     this.random,
@@ -69,7 +70,6 @@ class _HomeScreenState extends State<HomeScreen> {
       MaterialPageRoute<void>(
         builder: (_) => GameScreen(
           storage: widget.storage,
-          theme: widget.theme,
           audio: _audio,
           haptics: _haptics,
         ),
@@ -80,79 +80,94 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = widget.theme;
     final storage = widget.storage;
-    return Scaffold(
-      backgroundColor: theme.background,
-      body: Stack(
-        children: [
-          ListenableBuilder(
-            listenable: storage,
-            builder: (context, _) => Column(
-              children: [
-                Expanded(
-                  child: SafeArea(
-                    bottom: false,
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(
-                        _screenPadding,
-                        12,
-                        _screenPadding,
-                        12,
-                      ),
-                      child: Column(
-                        children: [
-                          Text(
-                            'ROUND ${storage.gamesPlayed + 1} · NIGHT RACE',
-                            style: TextStyle(
-                              fontFamily: 'Inter',
-                              fontVariations: const [
-                                FontVariation('wght', 600),
-                              ],
-                              fontSize: 11,
-                              letterSpacing: 1.8,
-                              color: theme.muted,
+    return ListenableBuilder(
+      listenable: storage,
+      builder: (context, _) {
+        final theme = storage.theme;
+        return Scaffold(
+          backgroundColor: theme.background,
+          body: Stack(
+            children: [
+              Column(
+                children: [
+                  Expanded(
+                    child: SafeArea(
+                      bottom: false,
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(
+                          _screenPadding,
+                          12,
+                          _screenPadding,
+                          12,
+                        ),
+                        child: Column(
+                          children: [
+                            Text(
+                              'ROUND ${storage.gamesPlayed + 1} · ${theme.name.toUpperCase()}',
+                              style: TextStyle(
+                                fontFamily: 'Inter',
+                                fontVariations: const [
+                                  FontVariation('wght', 600),
+                                ],
+                                fontSize: 11,
+                                letterSpacing: 1.8,
+                                color: theme.muted,
+                              ),
                             ),
-                          ),
-                          Expanded(
-                            child: Center(child: _Logo(theme: theme)),
-                          ),
-                          StartLightGantry(theme: theme, litPods: _litPods),
-                          const SizedBox(height: 14),
-                          _LightsOutButton(
-                            theme: theme,
-                            onTap: _sequence.start,
-                          ),
-                          const SizedBox(height: 12),
-                          _PoleCard(theme: theme, best: storage.bestScore),
-                          const SizedBox(height: 12),
-                          _LiveryRow(
-                            theme: theme,
-                            career: storage.careerPoints,
-                          ),
-                        ],
+                            Expanded(
+                              child: Center(child: _Logo(theme: theme)),
+                            ),
+                            StartLightGantry(theme: theme, litPods: _litPods),
+                            const SizedBox(height: 14),
+                            _LightsOutButton(
+                              theme: theme,
+                              onTap: _sequence.start,
+                            ),
+                            const SizedBox(height: 12),
+                            _PoleCard(
+                              theme: theme,
+                              best: storage.bestScore,
+                              onLongPress: kDebugMode
+                                  ? () => storage.debugAddCareerPoints(1000)
+                                  : null,
+                            ),
+                            const SizedBox(height: 12),
+                            _LiveryRow(theme: theme, storage: storage),
+                            const SizedBox(height: 4),
+                            _SetupButton(
+                              theme: theme,
+                              onTap: () => showSetupSheet(
+                                context,
+                                storage: storage,
+                                audio: _audio,
+                                haptics: _haptics,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
-                ),
-                CheckeredStrip(
-                  dark: theme.background,
-                  height: _checkerStripHeight,
-                ),
-                SizedBox(height: MediaQuery.paddingOf(context).bottom),
-              ],
-            ),
-          ),
-          // While the lights run, any tap skips straight to the race.
-          if (_sequence.isRunning)
-            Positioned.fill(
-              child: Listener(
-                behavior: HitTestBehavior.opaque,
-                onPointerDown: (_) => _sequence.skip(),
+                  CheckeredStrip(
+                    dark: theme.background,
+                    height: _checkerStripHeight,
+                  ),
+                  SizedBox(height: MediaQuery.paddingOf(context).bottom),
+                ],
               ),
-            ),
-        ],
-      ),
+              // While the lights run, any tap skips straight to the race.
+              if (_sequence.isRunning)
+                Positioned.fill(
+                  child: Listener(
+                    behavior: HitTestBehavior.opaque,
+                    onPointerDown: (_) => _sequence.skip(),
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
     );
   }
 }
@@ -174,7 +189,7 @@ class _Logo extends StatelessWidget {
             angle: _logoTiltDegrees * math.pi / 180,
             child: CustomPaint(
               size: const Size(84, 84),
-              painter: _ClusterPainter(liveries.first.preview),
+              painter: _ClusterPainter(theme.preview),
             ),
           ),
           const SizedBox(height: 14),
@@ -274,56 +289,90 @@ class _PoleCard extends StatelessWidget {
   final ApexTheme theme;
   final int best;
 
-  const _PoleCard({required this.theme, required this.best});
+  /// Debug builds only: long-press adds career points to test unlocks.
+  final VoidCallback? onLongPress;
+
+  const _PoleCard({required this.theme, required this.best, this.onLongPress});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      decoration: BoxDecoration(
-        color: theme.panelAlt,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: theme.border),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              color: theme.pole,
-              borderRadius: BorderRadius.circular(6),
-            ),
-            child: const Text(
-              'POLE',
-              style: TextStyle(
-                fontFamily: 'BarlowCondensed',
-                fontWeight: FontWeight.w800,
-                fontStyle: FontStyle.italic,
-                fontSize: 16,
-                letterSpacing: 1,
-                color: Colors.white,
+    return GestureDetector(
+      onLongPress: onLongPress,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: theme.panelAlt,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: theme.border),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: theme.pole,
+                borderRadius: BorderRadius.circular(6),
               ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: FittedBox(
-              fit: BoxFit.scaleDown,
-              alignment: Alignment.centerRight,
-              child: Text(
-                _withCommas(best),
+              child: const Text(
+                'POLE',
                 style: TextStyle(
                   fontFamily: 'BarlowCondensed',
                   fontWeight: FontWeight.w800,
                   fontStyle: FontStyle.italic,
-                  fontSize: 38,
-                  height: 1.05,
-                  color: theme.poleLight,
+                  fontSize: 16,
+                  letterSpacing: 1,
+                  color: Colors.white,
                 ),
               ),
             ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerRight,
+                child: Text(
+                  _withCommas(best),
+                  style: TextStyle(
+                    fontFamily: 'BarlowCondensed',
+                    fontWeight: FontWeight.w800,
+                    fontStyle: FontStyle.italic,
+                    fontSize: 38,
+                    height: 1.05,
+                    color: theme.poleLight,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SetupButton extends StatelessWidget {
+  final ApexTheme theme;
+  final VoidCallback onTap;
+
+  const _SetupButton({required this.theme, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 44,
+      child: TextButton(
+        style: TextButton.styleFrom(foregroundColor: theme.muted),
+        onPressed: onTap,
+        child: const Text(
+          'SETUP',
+          style: TextStyle(
+            fontFamily: 'BarlowCondensed',
+            fontWeight: FontWeight.w700,
+            fontStyle: FontStyle.italic,
+            fontSize: 18,
+            letterSpacing: 1.5,
           ),
-        ],
+        ),
       ),
     );
   }
@@ -331,22 +380,44 @@ class _PoleCard extends StatelessWidget {
 
 class _LiveryRow extends StatelessWidget {
   final ApexTheme theme;
-  final int career;
+  final StorageService storage;
 
-  const _LiveryRow({required this.theme, required this.career});
+  const _LiveryRow({required this.theme, required this.storage});
+
+  void _onTap(BuildContext context, int i) {
+    final career = storage.careerPoints;
+    if (isLiveryUnlocked(i, career)) {
+      storage.selectLivery(i);
+      return;
+    }
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          'Earn ${_withCommas(liveryUnlockPoints[i])} career points to '
+          'unlock ${allLiveries[i].name}',
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
+    final career = storage.careerPoints;
+    final selected = storage.selectedLivery;
     return Row(
       children: [
-        for (var i = 0; i < liveries.length; i++) ...[
+        for (var i = 0; i < allLiveries.length; i++) ...[
           if (i > 0) const SizedBox(width: 8),
           Expanded(
             child: _LiveryCard(
               theme: theme,
-              livery: liveries[i],
-              equipped: i == 0,
+              livery: allLiveries[i],
+              unlockPoints: liveryUnlockPoints[i],
+              equipped: i == selected,
               career: career,
+              onTap: () => _onTap(context, i),
             ),
           ),
         ],
@@ -357,82 +428,89 @@ class _LiveryRow extends StatelessWidget {
 
 class _LiveryCard extends StatelessWidget {
   final ApexTheme theme;
-  final LiveryInfo livery;
+  final ApexTheme livery;
+  final int unlockPoints;
   final bool equipped;
   final int career;
+  final VoidCallback onTap;
 
   const _LiveryCard({
     required this.theme,
     required this.livery,
+    required this.unlockPoints,
     required this.equipped,
     required this.career,
+    required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    final locked = career < livery.unlockPoints;
+    final locked = career < unlockPoints;
     final String status;
     if (equipped) {
       status = 'EQUIPPED';
     } else if (locked) {
-      status =
-          '${_withCommas(career)} / ${_withCommas(livery.unlockPoints)} pts';
+      status = '${_withCommas(career)} / ${_withCommas(unlockPoints)} pts';
     } else {
       status = 'UNLOCKED';
     }
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
-      decoration: BoxDecoration(
-        color: theme.panelAlt,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: equipped ? theme.accent : theme.border,
-          width: equipped ? 2 : 1,
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+        decoration: BoxDecoration(
+          color: theme.panelAlt,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: equipped ? theme.accent : theme.border,
+            width: equipped ? 2 : 1,
+          ),
         ),
-      ),
-      child: Column(
-        children: [
-          Opacity(
-            opacity: locked ? 0.45 : 1,
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                CustomPaint(
-                  size: const Size(34, 34),
-                  painter: _ClusterPainter(livery.preview),
-                ),
-                if (locked)
-                  const Icon(Icons.lock, size: 16, color: Colors.white),
-              ],
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            livery.name.toUpperCase(),
-            maxLines: 1,
-            style: TextStyle(
-              fontFamily: 'BarlowCondensed',
-              fontWeight: FontWeight.w700,
-              fontStyle: FontStyle.italic,
-              fontSize: 14,
-              height: 1,
-              color: theme.text,
-            ),
-          ),
-          const SizedBox(height: 3),
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            child: Text(
-              status,
-              style: TextStyle(
-                fontFamily: 'Inter',
-                fontVariations: const [FontVariation('wght', 500)],
-                fontSize: 10,
-                color: equipped ? theme.accent : theme.muted,
+        child: Column(
+          children: [
+            Opacity(
+              opacity: locked ? 0.45 : 1,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  CustomPaint(
+                    size: const Size(34, 34),
+                    painter: _ClusterPainter(livery.preview),
+                  ),
+                  if (locked)
+                    const Icon(Icons.lock, size: 16, color: Colors.white),
+                ],
               ),
             ),
-          ),
-        ],
+            const SizedBox(height: 6),
+            Text(
+              livery.name.toUpperCase(),
+              maxLines: 1,
+              style: TextStyle(
+                fontFamily: 'BarlowCondensed',
+                fontWeight: FontWeight.w700,
+                fontStyle: FontStyle.italic,
+                fontSize: 14,
+                height: 1,
+                color: theme.text,
+              ),
+            ),
+            const SizedBox(height: 3),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                status,
+                style: TextStyle(
+                  fontFamily: 'Inter',
+                  fontVariations: const [FontVariation('wght', 500)],
+                  fontSize: 10,
+                  color: equipped ? theme.accent : theme.muted,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
