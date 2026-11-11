@@ -8,7 +8,8 @@ import 'scoring.dart';
 /// Number of pieces in the tray.
 const int traySize = 3;
 
-/// How many times the fair dealer re-rolls a tray where nothing fits.
+/// How many times the fair dealer re-rolls a slot before falling back to a
+/// single.
 const int dealerMaxRetries = 10;
 
 /// How many random picks `dealFittingTray` tries per slot before using a single.
@@ -142,28 +143,20 @@ class GameState {
     );
   }
 
-  /// Fair dealer: re-rolls up to [dealerMaxRetries] times when no piece in the
-  /// tray fits; if nothing fits after that, deals the last roll anyway.
-  List<Piece> dealTray() {
-    var tray = _randomTray();
-    for (var i = 0; i < dealerMaxRetries; i++) {
-      if (tray.any(board.anyPlacementFor)) break;
-      tray = _randomTray();
-    }
-    return tray;
-  }
+  /// Fair dealer: every piece fits the current board on its own. Each slot
+  /// re-rolls up to [dealerMaxRetries] times, then falls back to a single
+  /// (dealt even if the board is full, since that is game over).
+  List<Piece> dealTray() => [
+    for (var i = 0; i < traySize; i++) _fittingPiece(dealerMaxRetries),
+  ];
 
   /// Three pieces that each fit the current board, falling back to singles.
   List<Piece> dealFittingTray() => [
-    for (var i = 0; i < traySize; i++) _fittingPiece(),
+    for (var i = 0; i < traySize; i++) _fittingPiece(fittingPickAttempts),
   ];
 
-  List<Piece> _randomTray() => [
-    for (var i = 0; i < traySize; i++) pickPiece(_random),
-  ];
-
-  Piece _fittingPiece() {
-    for (var i = 0; i < fittingPickAttempts; i++) {
+  Piece _fittingPiece(int attempts) {
+    for (var i = 0; i < attempts; i++) {
       final piece = pickPiece(_random);
       if (board.anyPlacementFor(piece)) return piece;
     }

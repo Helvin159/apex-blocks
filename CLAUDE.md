@@ -3,6 +3,7 @@
 Name: **Apex Blocks** (no existing app found under this name; a USPTO trademark search is still pending before store submission).
 Bundle ID / applicationId: `com.helvinrymer.apexblocks` on both platforms. Permanent: never change it.
 Devices: iPhone only on iOS for v1 (`TARGETED_DEVICE_FAMILY = 1`; iPad support can be added later, but can't be removed after release). Phones on Android.
+Launch plan: iOS ships first, as soon as v1 is done. Android stays release-ready (every milestone must pass `flutter build apk --debug`) and ships after the Google Play 12-tester / 14-day closed test, which starts whenever 12 testers are found. Nothing on iOS waits for Android.
 A casual, endless block puzzle game for iOS and Android with a night-race motorsport look. One home screen plus one game screen, no levels. Goal: polished, fast to ship, monetized with ads plus a Remove Ads purchase.
 
 **Trademark rule:** motorsport *vibe* only. Never use "Formula 1", "F1", "Grand Prix", team or driver names, real circuit names, team liveries or color schemes, official fonts, tyre-brand names, or any logos — not in code, UI text, assets, or store listings. Generic racing culture (checkered flags, start lights, pit stops, carbon fiber, timing screens, racing jargon) is fine.
@@ -52,7 +53,7 @@ Each family has a fixed color id (0–5, matching the six block colors). Game lo
 
 ### Dealing
 - Deal 3 weighted-random pieces.
-- When the board still has room, try to avoid dealing a tray where no piece fits (retry up to 10 times), so game overs feel fair rather than random.
+- Every piece in a fresh tray must fit the current board on its own (re-roll per slot, fall back to a single). Game over only happens through the order the player places pieces.
 
 ### Scoring (all values are constants in `scoring.dart`)
 - Placement: +1 point per cell placed.
@@ -102,7 +103,7 @@ Rounded squares (radius ~6 on board, ~4 small) with a vertical 3-stop gradient, 
 - Haptics: light on placement, medium on clears, a "rumble strip" pattern (several quick light pulses) on combos of 3+.
 
 ### Liveries (themes)
-**Night Race** (default, above), **Rain Race** (deep navy board, cool blue blocks), **Desert Dusk** (warm brown board, orange/sand/rose blocks). Same structure, different color tokens. Rain Race and Desert Dusk unlock by watching 3 rewarded ads each, or with Remove Ads.
+**Night Race** (default, above), **Rain Race** (deep navy board, cool blue blocks), **Desert Dusk** (warm brown board, orange/sand/rose blocks). Same structure, different color tokens. Unlocks: Rain Race at 5,000 career points, Desert Dusk at 15,000 career points (named constants; starting guesses, tune after testing), or 3 rewarded ads each, or instantly with Remove Ads. Career points = the sum of final scores across all runs. Locked livery cards show progress, e.g. "3,240 / 5,000 pts · or watch 3 ads".
 
 ### General
 Respect safe areas. Portrait only. Target 60 fps on mid-range phones. Touch targets ≥ 44 px.
@@ -115,10 +116,15 @@ Respect safe areas. Portrait only. Target 60 fps on mid-range phones. Touch targ
 - Run the UMP consent flow before loading any ads. On iOS, configure the App Tracking Transparency message.
 
 ## Persistence
-Best score, selected livery, livery unlock progress (rewarded ads watched per livery), sound and haptics toggles, `adsRemoved` flag, games-played counter, and first-session flag.
+Best score, career points, selected livery, livery unlock progress (rewarded ads watched per livery), sound and haptics toggles, `adsRemoved` flag, games-played counter, and first-session flag.
+
+## Post-launch backlog (do NOT build in v1)
+- Tracks: alternate boards with fictional names only (never real circuits), e.g. Harbour Night (standard 8×8), Hairpin (L-shaped board), Chicane (fixed blocked cells), Long Straight (9×7), Rain Run (random blocked cells). Each needs its own best score. First update candidate if day-30 data shows players leaving from sameness.
+- Paid "Track Pack" (cosmetic/variety only, never easier scoring), only if tracks prove popular.
 
 ## Working rules for Claude Code
 - Build in small steps. After each step, run `flutter analyze` and `flutter test`, and fix any issues before finishing.
+- Every milestone must also pass `flutter build apk --debug`. No iOS-only APIs or plugins without an Android equivalent.
 - Keep `lib/game/` pure Dart and fully unit-tested (placement, clears, scoring, combo, game-over detection, dealing).
 - Don't add packages or change the stack without asking.
 - Keep tunable numbers (weights, scores, ad frequency, animation timings) as named constants.

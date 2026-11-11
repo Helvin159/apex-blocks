@@ -28,15 +28,15 @@ const Map<PieceFamily, int> familyColorIds = {
 
 // Spawn weights per family. A family's weight is split evenly across its
 // orientations, so adding orientations never changes how often it appears.
-const double weightSingle = 4;
-const double weightDomino = 8;
+const double weightSingle = 6;
+const double weightDomino = 10;
 const double weightLineTromino = 8;
 const double weightLTromino = 8;
 const double weightSquare2 = 8;
 const double weightLineTetromino = 6;
-const double weightLTetromino = 8;
-const double weightTTetromino = 6;
-const double weightSTetromino = 6;
+const double weightLTetromino = 6;
+const double weightTTetromino = 4;
+const double weightSTetromino = 4;
 const double weightLinePentomino = 3;
 const double weightSquare3 = 2;
 

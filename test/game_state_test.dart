@@ -151,22 +151,68 @@ void main() {
   });
 
   group('fair dealer', () {
-    test('avoids a no-fit tray when a fit exists', () {
-      // Only a single hole: just a single fits. Singles are rare (4/65), so
-      // the dealer must be retrying to find one.
-      final b = boardWithOnly([(row: 0, col: 0)]);
-      var fitCount = 0;
-      const trials = 200;
-      for (var seed = 0; seed < trials; seed++) {
+    test('never deals a 3×3 when no 3×3 gap exists', () {
+      // Every 3×3 window contains one cell with row % 3 == 2 and col % 3 == 2.
+      final b = Board();
+      for (var r = 2; r < boardSize; r += 3) {
+        for (var c = 2; c < boardSize; c += 3) {
+          b.setCell(r, c, 1);
+        }
+      }
+      expect(b.anyPlacementFor(fam(PieceFamily.square3)), isFalse);
+      for (var seed = 0; seed < 500; seed++) {
         final g = GameState(
           random: Random(seed),
           board: b,
           tray: [single, single, single],
         );
-        if (g.dealTray().any(b.anyPlacementFor)) fitCount++;
+        for (final p in g.dealTray()) {
+          expect(p.family, isNot(PieceFamily.square3));
+        }
       }
-      // Unfair odds of one tray holding a single ≈ 17%; with 10 retries ≈ 85%+.
-      expect(fitCount, greaterThan(trials * 0.6));
+    });
+
+    test('every piece fits across 1,000 deals on random boards', () {
+      for (var seed = 0; seed < 1000; seed++) {
+        final rng = Random(seed);
+        final density = 0.2 + rng.nextDouble() * 0.7;
+        final b = Board();
+        for (var r = 0; r < boardSize; r++) {
+          for (var c = 0; c < boardSize; c++) {
+            if (rng.nextDouble() < density) b.setCell(r, c, 1);
+          }
+        }
+        b.setCell(rng.nextInt(boardSize), rng.nextInt(boardSize), null);
+        final g = GameState(
+          random: rng,
+          board: b,
+          tray: [single, single, single],
+        );
+        final dealt = g.dealTray();
+        expect(dealt.length, traySize);
+        for (final p in dealt) {
+          expect(b.anyPlacementFor(p), isTrue, reason: '${p.id} (seed $seed)');
+        }
+      }
+    });
+
+    test('falls back to singles when only 1×1 gaps exist', () {
+      final b = Board();
+      for (var r = 0; r < boardSize; r++) {
+        for (var c = 0; c < boardSize; c++) {
+          if ((r + c).isEven) b.setCell(r, c, 1);
+        }
+      }
+      for (var seed = 0; seed < 100; seed++) {
+        final g = GameState(
+          random: Random(seed),
+          board: b,
+          tray: [single, single, single],
+        );
+        for (final p in g.dealTray()) {
+          expect(p.family, PieceFamily.single);
+        }
+      }
     });
 
     test('still deals when nothing can fit', () {

@@ -14,8 +14,10 @@ void main() {
   });
 
   test('combo multiplier sequence 1.0, 1.5, 2.0, 2.5, 3.0 and no cap', () {
-    expect([for (var i = 0; i < 5; i++) comboMultiplier(i)],
-        [1.0, 1.5, 2.0, 2.5, 3.0]);
+    expect(
+      [for (var i = 0; i < 5; i++) comboMultiplier(i)],
+      [1.0, 1.5, 2.0, 2.5, 3.0],
+    );
     expect(comboMultiplier(20), 11.0);
   });
 
