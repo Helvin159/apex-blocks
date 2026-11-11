@@ -53,3 +53,8 @@ app.*.map.json
 key.properties
 *.p8
 *.p12
+
+# AdMob IDs (real ones stay local; see RELEASE.md)
+/ad_ids.json
+/ios/Flutter/AdMob.xcconfig
+/android/admob.properties

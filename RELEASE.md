@@ -12,15 +12,24 @@ flutter build ipa --dart-define=REAL_ADS=true
 Three separate units are needed per platform, so AdMob reports each one separately:
 rewarded **Pit Stop**, rewarded **livery unlock**, interstitial **between races**.
 
-## Switching the native app IDs for the App Store / Play build
-The native app IDs cannot be set with `--dart-define`; they are Google's **test** app IDs for now.
+## Real IDs stay out of git
+Nothing real is committed. Three git-ignored files hold the IDs; each has a committed `*.example` template:
 
-1. iOS: `ios/Runner/Info.plist`, key `GADApplicationIdentifier` (currently `ca-app-pub-3940256099942544~1458002511`). Replace with the real iOS app ID (`ca-app-pub-<publisher>~<app>`).
-2. Android: `android/app/src/main/AndroidManifest.xml`, meta-data `com.google.android.gms.ads.APPLICATION_ID` (currently `ca-app-pub-3940256099942544~3347511713`). Replace with the real Android app ID.
-3. Replace the unit ID placeholders in `lib/config/ad_config.dart`.
-4. Build with `--dart-define=REAL_ADS=true`.
+| File | Holds | Template |
+| --- | --- | --- |
+| `ad_ids.json` | the 6 ad unit IDs (3 per platform) | `ad_ids.example.json` |
+| `ios/Flutter/AdMob.xcconfig` | iOS AdMob app ID (`ADMOB_APP_ID`) | `AdMob.example.xcconfig` |
+| `android/admob.properties` | Android AdMob app ID (`appId`) | `admob.example.properties` |
 
-Never mix them: real unit IDs with a test app ID (or the reverse) will not serve properly.
+Without the app-ID files the native app IDs fall back to Google's **test** app IDs (`AdMobDefaults.xcconfig`, `build.gradle.kts`).
+
+Build with real ads:
+
+```
+flutter build ipa --dart-define=REAL_ADS=true --dart-define-from-file=ad_ids.json
+```
+
+Never mix: real unit IDs need the real app ID of the same app, and test units need the test app ID. (These IDs ship inside the app binary, so gitignoring only keeps them out of the repo.) Before any release build, check that `git status` shows none of the three files.
 
 ## iOS
 - `NSUserTrackingUsageDescription` is set. The ATT prompt is shown by Google's UMP message once the IDFA explainer message is configured in AdMob (Privacy & messaging).

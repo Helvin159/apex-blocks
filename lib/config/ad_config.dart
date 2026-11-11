@@ -48,18 +48,32 @@ const AdUnitIds _testAndroid = AdUnitIds(
   betweenRaces: 'ca-app-pub-3940256099942544/1033173712',
 );
 
-// TODO(release): replace with the real ad unit IDs from the AdMob console
-// (see RELEASE.md). The app IDs live in Info.plist and AndroidManifest.xml.
+// The real ad unit IDs are not in the repo. They come from the git-ignored
+// `ad_ids.json` (copy `ad_ids.example.json`), passed to the build with
+// `--dart-define-from-file=ad_ids.json`; see RELEASE.md. Unset means ads off.
+const String _unset = 'ca-app-pub-XXXXXXXXXXXXXXXX/XXXXXXXXXX';
 const AdUnitIds _realIos = AdUnitIds(
-  pitStop: 'ca-app-pub-XXXXXXXXXXXXXXXX/XXXXXXXXXX',
-  liveryUnlock: 'ca-app-pub-XXXXXXXXXXXXXXXX/XXXXXXXXXX',
-  betweenRaces: 'ca-app-pub-XXXXXXXXXXXXXXXX/XXXXXXXXXX',
+  pitStop: String.fromEnvironment('IOS_PIT_STOP_AD', defaultValue: _unset),
+  liveryUnlock: String.fromEnvironment(
+    'IOS_LIVERY_UNLOCK_AD',
+    defaultValue: _unset,
+  ),
+  betweenRaces: String.fromEnvironment(
+    'IOS_INTERSTITIAL_AD',
+    defaultValue: _unset,
+  ),
 );
 
 const AdUnitIds _realAndroid = AdUnitIds(
-  pitStop: 'ca-app-pub-XXXXXXXXXXXXXXXX/XXXXXXXXXX',
-  liveryUnlock: 'ca-app-pub-XXXXXXXXXXXXXXXX/XXXXXXXXXX',
-  betweenRaces: 'ca-app-pub-XXXXXXXXXXXXXXXX/XXXXXXXXXX',
+  pitStop: String.fromEnvironment('ANDROID_PIT_STOP_AD', defaultValue: _unset),
+  liveryUnlock: String.fromEnvironment(
+    'ANDROID_LIVERY_UNLOCK_AD',
+    defaultValue: _unset,
+  ),
+  betweenRaces: String.fromEnvironment(
+    'ANDROID_INTERSTITIAL_AD',
+    defaultValue: _unset,
+  ),
 );
 
 /// Which ad IDs this build uses.

@@ -1,1 +1,3 @@
 #include "Generated.xcconfig"
+#include "AdMobDefaults.xcconfig"
+#include? "AdMob.xcconfig"

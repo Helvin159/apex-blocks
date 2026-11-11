@@ -1,0 +1,2 @@
+// Copy to AdMob.xcconfig (git-ignored) and put the real iOS AdMob app ID here.
+ADMOB_APP_ID = ca-app-pub-XXXXXXXXXXXXXXXX~XXXXXXXXXX
