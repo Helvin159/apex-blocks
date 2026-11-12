@@ -43,6 +43,10 @@ class HomeScreen extends StatefulWidget {
   /// Randomizes the start-light hold; tests pass a seeded one.
   final math.Random? random;
 
+  /// Debug-only shortcuts (long-press the Pole card for career points).
+  /// Release builds never have them.
+  final bool showDebugTools;
+
   const HomeScreen({
     super.key,
     required this.storage,
@@ -51,6 +55,7 @@ class HomeScreen extends StatefulWidget {
     this.ads,
     this.iap,
     this.random,
+    this.showDebugTools = kDebugMode,
   });
 
   @override
@@ -145,7 +150,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             _PoleCard(
                               theme: theme,
                               best: storage.bestScore,
-                              onLongPress: kDebugMode
+                              onLongPress: widget.showDebugTools
                                   ? () => storage.debugAddCareerPoints(1000)
                                   : null,
                             ),
@@ -162,6 +167,8 @@ class _HomeScreenState extends State<HomeScreen> {
                                 _BottomButton(
                                   theme: theme,
                                   label: 'SETUP',
+                                  semanticLabel:
+                                      'Setup. Sound, privacy and help',
                                   onTap: () => showSetupSheet(
                                     context,
                                     storage: storage,
@@ -178,6 +185,9 @@ class _HomeScreenState extends State<HomeScreen> {
                                     label: storage.adsRemoved
                                         ? 'CLEAN AIR · ACTIVE'
                                         : 'CLEAN AIR · NO ADS',
+                                    semanticLabel: storage.adsRemoved
+                                        ? 'Clean air active. Ads are removed'
+                                        : 'Clean air. Remove ads',
                                     color: storage.adsRemoved
                                         ? theme.highlight
                                         : theme.text,
@@ -307,26 +317,32 @@ class _LightsOutButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: double.infinity,
-      height: _buttonHeight,
-      child: FilledButton(
-        style: FilledButton.styleFrom(
-          backgroundColor: theme.accent,
-          foregroundColor: Colors.white,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
+    return Semantics(
+      button: true,
+      label: 'Lights out. Start a race',
+      onTap: onTap,
+      excludeSemantics: true,
+      child: SizedBox(
+        width: double.infinity,
+        height: _buttonHeight,
+        child: FilledButton(
+          style: FilledButton.styleFrom(
+            backgroundColor: theme.accent,
+            foregroundColor: Colors.white,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+            ),
           ),
-        ),
-        onPressed: onTap,
-        child: const Text(
-          'LIGHTS OUT →',
-          style: TextStyle(
-            fontFamily: 'BarlowCondensed',
-            fontWeight: FontWeight.w800,
-            fontStyle: FontStyle.italic,
-            fontSize: 28,
-            letterSpacing: 1,
+          onPressed: onTap,
+          child: const Text(
+            'LIGHTS OUT →',
+            style: TextStyle(
+              fontFamily: 'BarlowCondensed',
+              fontWeight: FontWeight.w800,
+              fontStyle: FontStyle.italic,
+              fontSize: 28,
+              letterSpacing: 1,
+            ),
           ),
         ),
       ),
@@ -403,6 +419,9 @@ class _PoleCard extends StatelessWidget {
 class _BottomButton extends StatelessWidget {
   final ApexTheme theme;
   final String label;
+
+  /// What a screen reader says instead of the styled [label].
+  final String semanticLabel;
   final Color? color;
 
   /// Null shows the label without reacting to taps.
@@ -411,29 +430,37 @@ class _BottomButton extends StatelessWidget {
   const _BottomButton({
     required this.theme,
     required this.label,
+    required this.semanticLabel,
     this.color,
     required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: 44,
-      child: TextButton(
-        style: TextButton.styleFrom(
-          foregroundColor: color ?? theme.muted,
-          disabledForegroundColor: color ?? theme.muted,
-        ),
-        onPressed: onTap,
-        child: Text(
-          label,
-          maxLines: 1,
-          style: const TextStyle(
-            fontFamily: 'BarlowCondensed',
-            fontWeight: FontWeight.w700,
-            fontStyle: FontStyle.italic,
-            fontSize: 18,
-            letterSpacing: 1.5,
+    return Semantics(
+      button: true,
+      enabled: onTap != null,
+      label: semanticLabel,
+      onTap: onTap,
+      excludeSemantics: true,
+      child: SizedBox(
+        height: 44,
+        child: TextButton(
+          style: TextButton.styleFrom(
+            foregroundColor: color ?? theme.muted,
+            disabledForegroundColor: color ?? theme.muted,
+          ),
+          onPressed: onTap,
+          child: Text(
+            label,
+            maxLines: 1,
+            style: const TextStyle(
+              fontFamily: 'BarlowCondensed',
+              fontWeight: FontWeight.w700,
+              fontStyle: FontStyle.italic,
+              fontSize: 18,
+              letterSpacing: 1.5,
+            ),
           ),
         ),
       ),

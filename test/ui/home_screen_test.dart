@@ -122,6 +122,33 @@ void main() {
     expect(find.text(appVersion), findsOneWidget);
   });
 
+  testWidgets('home buttons have semantic labels that skip the styling', (
+    tester,
+  ) async {
+    final semantics = tester.ensureSemantics();
+    useScreen(tester, const Size(375, 812));
+    final storage = await makeStorage();
+    await tester.pumpWidget(MaterialApp(home: HomeScreen(storage: storage)));
+    for (final label in [
+      'Lights out. Start a race',
+      'Setup. Sound, privacy and help',
+      'Clean air. Remove ads',
+    ]) {
+      expect(find.bySemanticsLabel(label), findsOneWidget, reason: label);
+    }
+    // The arrow in the styled text is not read out.
+    expect(find.bySemanticsLabel('LIGHTS OUT →'), findsNothing);
+
+    final active = await makeStorage({'adsRemoved': true});
+    await tester.pumpWidget(MaterialApp(home: HomeScreen(storage: active)));
+    await tester.pump();
+    expect(
+      find.bySemanticsLabel('Clean air active. Ads are removed'),
+      findsOneWidget,
+    );
+    semantics.dispose();
+  });
+
   testWidgets('LIGHTS OUT starts a run; the Home screen refreshes after', (
     tester,
   ) async {
@@ -134,7 +161,7 @@ void main() {
     expect(find.byType(GameScreen), findsOneWidget);
 
     await storage.recordRun(500);
-    await tester.tap(find.byTooltip('Menu'));
+    await tester.tap(find.byTooltip('Pause'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('GARAGE'));
     await tester.pumpAndSettle();

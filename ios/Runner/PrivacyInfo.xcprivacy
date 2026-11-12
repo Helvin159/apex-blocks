@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- The app shows AdMob ads and asks for App Tracking Transparency
+	     permission. The Google Mobile Ads SDK's own manifest marks Device ID
+	     as used for tracking, so the app declares tracking too. -->
+	<key>NSPrivacyTracking</key>
+	<true/>
+	<!-- Google does not publish a tracking-domain list that can be copied
+	     here, so none is declared. See RELEASE.md. -->
+	<key>NSPrivacyTrackingDomains</key>
+	<array/>
+	<!-- The app itself collects nothing. Data the ad and consent SDKs collect
+	     is declared by their own bundled manifests. -->
+	<key>NSPrivacyCollectedDataTypes</key>
+	<array/>
+	<!-- The app's own code uses no required-reason APIs. Each plugin and SDK
+	     ships its own manifest for the ones it uses. -->
+	<key>NSPrivacyAccessedAPITypes</key>
+	<array/>
+</dict>
+</plist>

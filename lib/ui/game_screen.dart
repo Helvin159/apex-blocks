@@ -1,5 +1,6 @@
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
@@ -482,6 +483,15 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         reducedMotion: MediaQuery.disableAnimationsOf(context),
       );
     }
+    _effects.triggerDrop(
+      placed: result.placedCells,
+      colorId: piece.colorId,
+      board: _game.board,
+      geometry: _geometry,
+      theme: _theme,
+      clearsLines: lines > 0,
+      reducedMotion: MediaQuery.disableAnimationsOf(context),
+    );
 
     final text = popupFor(result);
     if (text != null) _popup.value = PopupEvent(++_popupId, text);
@@ -634,6 +644,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                         score: _game.score,
                         best: widget.storage.bestScore,
                         flash: _flashCtl,
+                        bump: _effects.scoreBump,
                         onMenu: _openMenu,
                       ),
                       SizedBox(
@@ -648,23 +659,34 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                             key: _boardKey,
                             width: _geometry.panelWidth,
                             height: _geometry.panelHeight,
-                            child: Stack(
-                              clipBehavior: Clip.none,
-                              children: [
-                                BoardView(
-                                  game: _game,
-                                  theme: theme,
-                                  geometry: _geometry,
-                                  repaint: _boardTick,
-                                  ghost: _ghost,
-                                ),
-                                Positioned.fill(
-                                  child: ClearEffectsOverlay(
-                                    controller: _effects,
-                                    geometry: _geometry,
+                            // The thump only moves the composited layers.
+                            child: ValueListenableBuilder<double>(
+                              valueListenable: _effects.thumpDy,
+                              builder: (context, dy, child) =>
+                                  Transform.translate(
+                                    offset: Offset(0, dy),
+                                    child: child,
                                   ),
-                                ),
-                              ],
+                              child: Stack(
+                                clipBehavior: Clip.none,
+                                children: [
+                                  BoardView(
+                                    game: _game,
+                                    theme: theme,
+                                    geometry: _geometry,
+                                    repaint: _boardTick,
+                                    ghost: _ghost,
+                                    dropFrame: _effects.dropFrame,
+                                    dropRepaint: _effects.dropRepaint,
+                                  ),
+                                  Positioned.fill(
+                                    child: ClearEffectsOverlay(
+                                      controller: _effects,
+                                      geometry: _geometry,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
                         ),
@@ -727,6 +749,7 @@ class _Header extends StatelessWidget {
   final int score;
   final int best;
   final Animation<double> flash;
+  final ValueListenable<double> bump;
   final VoidCallback onMenu;
 
   const _Header({
@@ -734,6 +757,7 @@ class _Header extends StatelessWidget {
     required this.score,
     required this.best,
     required this.flash,
+    required this.bump,
     required this.onMenu,
   });
 
@@ -743,27 +767,38 @@ class _Header extends StatelessWidget {
       height: _headerHeight,
       child: Row(
         children: [
-          SizedBox(
-            width: _menuButtonSize,
-            height: _menuButtonSize,
-            child: IconButton(
-              tooltip: 'Menu',
-              padding: EdgeInsets.zero,
-              style: IconButton.styleFrom(
-                backgroundColor: theme.panelAlt,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  side: BorderSide(color: theme.border),
+          Semantics(
+            button: true,
+            label: 'Pause',
+            onTap: onMenu,
+            excludeSemantics: true,
+            child: SizedBox(
+              width: _menuButtonSize,
+              height: _menuButtonSize,
+              child: IconButton(
+                tooltip: 'Pause',
+                padding: EdgeInsets.zero,
+                style: IconButton.styleFrom(
+                  backgroundColor: theme.panelAlt,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    side: BorderSide(color: theme.border),
+                  ),
                 ),
+                icon: Icon(Icons.menu, color: theme.text, size: 22),
+                onPressed: onMenu,
               ),
-              icon: Icon(Icons.menu, color: theme.text, size: 22),
-              onPressed: onMenu,
             ),
           ),
           const SizedBox(width: 8),
           Expanded(
             flex: 3,
-            child: _ScoreBox(score: score, theme: theme, flash: flash),
+            child: _ScoreBox(
+              score: score,
+              theme: theme,
+              flash: flash,
+              bump: bump,
+            ),
           ),
           const SizedBox(width: 8),
           Expanded(
@@ -780,11 +815,13 @@ class _ScoreBox extends StatelessWidget {
   final int score;
   final ApexTheme theme;
   final Animation<double> flash;
+  final ValueListenable<double> bump;
 
   const _ScoreBox({
     required this.score,
     required this.theme,
     required this.flash,
+    required this.bump,
   });
 
   @override
@@ -808,19 +845,23 @@ class _ScoreBox extends StatelessWidget {
               children: [
                 Text('SCORE', style: _boxLabel(theme.muted)),
                 AnimatedBuilder(
-                  animation: flash,
-                  builder: (context, _) => FittedBox(
-                    fit: BoxFit.scaleDown,
+                  animation: Listenable.merge([flash, bump]),
+                  builder: (context, _) => Transform.scale(
+                    scale: bump.value,
                     alignment: Alignment.centerLeft,
-                    child: Text(
-                      '$score',
-                      style: _boxNumber(
-                        // Purple at once, easing back to white.
-                        Color.lerp(
-                          theme.text,
-                          theme.pole,
-                          flash.value == 0 ? 0 : 1 - flash.value,
-                        )!,
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        '$score',
+                        style: _boxNumber(
+                          // Purple at once, easing back to white.
+                          Color.lerp(
+                            theme.text,
+                            theme.pole,
+                            flash.value == 0 ? 0 : 1 - flash.value,
+                          )!,
+                        ),
                       ),
                     ),
                   ),

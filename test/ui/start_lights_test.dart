@@ -110,7 +110,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(GameScreen), findsOneWidget);
 
-    await tester.tap(find.byTooltip('Menu'));
+    await tester.tap(find.byTooltip('Pause'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('GARAGE'));
     await tester.pumpAndSettle();

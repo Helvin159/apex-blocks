@@ -16,6 +16,7 @@ A casual, endless block puzzle game for iOS and Android with a night-race motors
   - `google_mobile_ads` — AdMob rewarded and interstitial ads, plus the UMP consent flow
   - `in_app_purchase` — Remove Ads (non-consumable)
   - `audioplayers` — sound effects
+  - `url_launcher` — opens the privacy policy and support pages (Apple requires an in-app privacy policy link)
 - Haptics: Flutter's built-in `HapticFeedback`.
 - All graphics are drawn in code (`CustomPainter`). No paid assets. Any third-party asset must be CC0 and logged in `ASSETS.md` with its source URL.
 - Fonts: **Barlow Condensed** (display, numbers; italic for speed) and **Inter** (small body text), both SIL Open Font License from Google Fonts. Bundle the .ttf files in `assets/fonts/` (no `google_fonts` package) and log them in `ASSETS.md` with the license.
@@ -117,6 +118,20 @@ Rounded squares (radius ~6 on board, ~4 small) with a vertical 3-stop gradient, 
   - Also: placement click, a start-light beep per light.
 - Haptics: light on placement, medium on clears, a "rumble strip" pattern (several quick light pulses) on combos of 3+.
 
+### Drop effects (every placement)
+Every drop gets a small visual reward. All effects are quick, never block input, and each sits behind its own named bool constant (`DROP_FX_*`) so any one can be switched off in one line. Timing values are named constants. Colors come from the equipped livery.
+- **Landing squash:** new blocks scale 1.14 → 0.93 → 1.035 → 1.0 over 170 ms.
+- **Impact flash:** white overlay on new blocks, alpha 0.6 → 0 (quadratic) over 150 ms.
+- **Paint glint:** a slanted white band sweeps across each new block over 260 ms, starting 70 ms after landing, staggered 22 ms per cell along the piece's diagonal.
+- **Points pop:** "+N" (cells placed) in italic highlight yellow rises about half a cell over 560 ms and fades; the score number bumps to 1.16× for 220 ms.
+- **Tyre dust:** pieces of 4+ cells only: 2 small gray puffs per column from the piece's bottom edge, drifting out and down, 300–420 ms.
+- **Board thump:** pieces of 5+ cells only: the board dips ~3 px in a damped wobble over 170 ms.
+- **Shockwave ring:** a rounded outline in the piece's light color grows 2 → 13 px beyond the piece and fades over 260 ms.
+- **Neighbor nudge:** occupied cells touching the new piece shift ~2.6 px away and spring back over 200 ms.
+- When a drop clears a line: play only the squash and flash, then the clear effect and clear pop-up take over (no points pop, ring, glint or dust on that move).
+- Reduced motion: only the impact flash.
+- Dust shares the clear effects' particle pool and `MAX_PARTICLES` cap.
+
 ### Liveries (themes)
 **Night Race** (default, above), **Rain Race**, **Desert Dusk**. Same structure, different color tokens, all in `themes.dart`. The livery recolors Home, the game screen, the Chequered flag screen and clear effects.
 - Constant across liveries: start lights are always red `#FF2D3A` (real start lights are red); Pole purple `#9B5CFF` / `#C9A2FF`; combo/highlight yellow `#FFC22E`.
@@ -127,7 +142,7 @@ Rounded squares (radius ~6 on board, ~4 small) with a vertical 3-stop gradient, 
 - When a run's career points cross a threshold, the Chequered flag screen shows "LIVERY UNLOCKED · RAIN RACE" with a one-tap "Equip" button.
 
 ### Setup (settings sheet)
-Opened from the Home screen's SETUP button and the game's pause sheet. Rows: Sound on/off, Haptics on/off (both persisted, default on), Privacy policy (link; added with store prep), Restore Purchases (milestone 7), Licenses (Flutter's license page, with the SIL Open Font License registered for the bundled fonts), and the app version.
+Opened from the Home screen's SETUP button and the game's pause sheet. Rows: Sound on/off, Haptics on/off (both persisted, default on), Privacy choices (only when the consent tool requires it), Privacy policy and Help & support (open the web pages in the browser), Restore Purchases, Licenses (Flutter's license page, with the SIL Open Font License registered for the bundled fonts), and the app version.
 
 ### General
 Respect safe areas. Portrait only. Target 60 fps on mid-range phones. Touch targets ≥ 44 px.

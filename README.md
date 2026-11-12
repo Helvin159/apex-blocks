@@ -1,17 +1,20 @@
-# apexblocks
+# Apex Blocks
 
-A new Flutter project.
+An endless block puzzle for iOS and Android with a night-race look. One home
+screen, one game screen, no levels.
 
-## Getting Started
+- The spec and working rules are in [CLAUDE.md](CLAUDE.md).
+- Release and App Store steps are in [RELEASE.md](RELEASE.md).
+- Third-party assets and licenses are in [ASSETS.md](ASSETS.md).
 
-This project is a starting point for a Flutter application.
+## Develop
 
-A few resources to get you started if this is your first Flutter project:
+```
+flutter pub get
+flutter analyze
+flutter test
+flutter run            # debug build, Google test ads
+flutter run --profile  # to check frame times on a real phone
+```
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
-
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+`lib/game/` is pure Dart (no Flutter imports) and fully unit-tested.

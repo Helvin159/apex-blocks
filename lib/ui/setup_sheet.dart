@@ -1,6 +1,9 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
+import '../config/ad_config.dart';
+import '../config/links.dart';
 import '../services/audio_service.dart';
 import '../services/consent_service.dart';
 import '../services/haptics_service.dart';
@@ -10,9 +13,15 @@ import '../theme/themes.dart';
 import 'purchase_text.dart';
 
 /// Keep in sync with `version:` in pubspec.yaml (no package_info_plus).
-const String appVersion = '1.0.0+6';
+const String appVersion = '1.0.0+7';
 
 const String _appName = 'Apex Blocks';
+
+/// Opens [url] outside the app. Returns false if nothing could open it.
+typedef UrlOpener = Future<bool> Function(Uri url);
+
+Future<bool> _openInBrowser(Uri url) =>
+    launchUrl(url, mode: LaunchMode.externalApplication);
 
 /// Applies the saved sound and haptics toggles to the services.
 void applySavedSettings(
@@ -24,8 +33,9 @@ void applySavedSettings(
   haptics.enabled.value = storage.hapticsOn;
 }
 
-/// Opens the Setup sheet: Sound and Haptics toggles, Restore Purchases,
-/// Licenses, version (and reset rows in debug builds).
+/// Opens the Setup sheet: Sound and Haptics toggles, privacy and support
+/// links, Restore Purchases, Licenses, version (and reset rows in debug
+/// builds).
 Future<void> showSetupSheet(
   BuildContext context, {
   required StorageService storage,
@@ -33,6 +43,7 @@ Future<void> showSetupSheet(
   required HapticsService haptics,
   ConsentService? consent,
   IapService? iap,
+  UrlOpener openUrl = _openInBrowser,
 }) {
   final theme = storage.theme;
   return showModalBottomSheet<void>(
@@ -48,6 +59,7 @@ Future<void> showSetupSheet(
       haptics: haptics,
       consent: consent,
       iap: iap,
+      openUrl: openUrl,
     ),
   );
 }
@@ -63,6 +75,15 @@ class SetupSheet extends StatefulWidget {
   /// Source of the "Restore Purchases" row; the row is absent when null.
   final IapService? iap;
 
+  /// Opens the privacy policy and support pages.
+  final UrlOpener openUrl;
+
+  /// Shows the debug-only reset rows. Release builds never do.
+  final bool showDebugTools;
+
+  /// True when this build serves real ads; otherwise the Version row says so.
+  final bool realAds;
+
   const SetupSheet({
     super.key,
     required this.storage,
@@ -70,6 +91,9 @@ class SetupSheet extends StatefulWidget {
     required this.haptics,
     this.consent,
     this.iap,
+    this.openUrl = _openInBrowser,
+    this.showDebugTools = kDebugMode,
+    this.realAds = realAdsRequested,
   });
 
   @override
@@ -79,6 +103,9 @@ class SetupSheet extends StatefulWidget {
 class _SetupSheetState extends State<SetupSheet> {
   /// Result of the last Restore Purchases attempt.
   String? _restoreMessage;
+
+  /// Set when a page could not be opened, so its address can be copied.
+  String? _failedUrl;
 
   StorageService get storage => widget.storage;
   AudioService get audio => widget.audio;
@@ -90,6 +117,28 @@ class _SetupSheetState extends State<SetupSheet> {
     final outcome = await iap.restore();
     if (mounted) setState(() => _restoreMessage = restoreText(outcome));
   }
+
+  Future<void> _open(String url) async {
+    setState(() => _failedUrl = null);
+    var opened = false;
+    try {
+      opened = await widget.openUrl(Uri.parse(url));
+    } catch (_) {
+      opened = false;
+    }
+    if (!opened && mounted) setState(() => _failedUrl = url);
+  }
+
+  Widget _linkRow(ApexTheme theme, String title, String url) => ListTile(
+    contentPadding: EdgeInsets.zero,
+    minTileHeight: 48,
+    title: Text(title, style: _rowStyle(theme)),
+    subtitle: _failedUrl == url
+        ? SelectableText(url, style: _noteStyle(theme))
+        : null,
+    trailing: Icon(Icons.open_in_new, color: theme.muted, size: 20),
+    onTap: () => _open(url),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -154,6 +203,8 @@ class _SetupSheetState extends State<SetupSheet> {
                           )
                         : const SizedBox.shrink(),
                   ),
+                _linkRow(theme, 'Privacy policy', privacyPolicyUrl),
+                _linkRow(theme, 'Help & support', supportUrl),
                 if (iap != null)
                   ListTile(
                     contentPadding: EdgeInsets.zero,
@@ -182,13 +233,18 @@ class _SetupSheetState extends State<SetupSheet> {
                   contentPadding: EdgeInsets.zero,
                   minTileHeight: 48,
                   title: Text('Version', style: _rowStyle(theme)),
+                  // A correct App Store build is in real-ads mode and shows
+                  // no note, so a leftover test build is easy to spot.
+                  subtitle: widget.realAds
+                      ? null
+                      : Text('Test ads', style: _noteStyle(theme)),
                   trailing: Text(
                     appVersion,
                     style: _rowStyle(theme).copyWith(color: theme.muted),
                   ),
                 ),
                 // Debug builds only; compiled out of release builds.
-                if (kDebugMode) ...[
+                if (widget.showDebugTools) ...[
                   ListTile(
                     contentPadding: EdgeInsets.zero,
                     minTileHeight: 48,

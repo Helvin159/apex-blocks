@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
@@ -10,6 +11,7 @@ import '../theme/themes.dart';
 import 'block_painter.dart';
 import 'board_geometry.dart';
 import 'checkered.dart';
+import 'effects/drop_effects.dart';
 
 const double _panelRadius = 14;
 const double _weaveSpacing = 6;
@@ -34,13 +36,16 @@ class GhostInfo {
 }
 
 /// The whole board, drawn by a single painter. It repaints when [repaint]
-/// (game changes) or [ghost] (drag preview) notify, without rebuilding.
+/// (game changes), [ghost] (drag preview) or [dropRepaint] (drop effects on
+/// [dropFrame]) notify, without rebuilding.
 class BoardView extends StatelessWidget {
   final GameState game;
   final ApexTheme theme;
   final BoardGeometry geometry;
   final Listenable repaint;
   final ValueListenable<GhostInfo?> ghost;
+  final DropFrame? dropFrame;
+  final Listenable? dropRepaint;
 
   const BoardView({
     super.key,
@@ -49,6 +54,8 @@ class BoardView extends StatelessWidget {
     required this.geometry,
     required this.repaint,
     required this.ghost,
+    this.dropFrame,
+    this.dropRepaint,
   });
 
   @override
@@ -61,7 +68,8 @@ class BoardView extends StatelessWidget {
           theme: theme,
           geometry: geometry,
           ghost: ghost,
-          repaint: Listenable.merge([repaint, ghost]),
+          dropFrame: dropFrame,
+          repaint: Listenable.merge([repaint, ghost, ?dropRepaint]),
         ),
       ),
     );
@@ -73,6 +81,7 @@ class BoardPainter extends CustomPainter {
   final ApexTheme theme;
   final BoardGeometry geometry;
   final ValueListenable<GhostInfo?> ghost;
+  final DropFrame? dropFrame;
 
   BoardPainter({
     required this.game,
@@ -80,6 +89,7 @@ class BoardPainter extends CustomPainter {
     required this.geometry,
     required this.ghost,
     required Listenable repaint,
+    this.dropFrame,
   }) : super(repaint: repaint);
 
   static final Paint _glowPaint = Paint()
@@ -89,18 +99,23 @@ class BoardPainter extends CustomPainter {
   static final Paint _lineOutline = Paint()
     ..style = PaintingStyle.stroke
     ..strokeWidth = 1.5;
+  static final Paint _fx = Paint();
+  static final Path _glintPath = Path();
 
   @override
   void paint(Canvas canvas, Size size) {
     canvas.drawPicture(_carbon.pictureFor(size, theme));
 
     final board = game.board;
+    final fx = dropFrame;
     for (var r = 0; r < boardSize; r++) {
       for (var c = 0; c < boardSize; c++) {
         final rect = geometry.cellRect(r, c);
         final id = board.cellAt(r, c);
         if (id == null) {
           paintEmptyCell(canvas, rect, theme.emptyCell);
+        } else if (fx != null && fx.isTouched(DropFrame.indexOf(r, c))) {
+          _paintDropBlock(canvas, rect, theme.blocks[id], fx, r, c);
         } else {
           paintBlock(canvas, rect, theme.blocks[id]);
         }
@@ -111,6 +126,63 @@ class BoardPainter extends CustomPainter {
     if (g == null) return;
     _paintGhost(canvas, g);
     _paintGlow(canvas, g);
+  }
+
+  /// A block mid drop effect: squashed and nudged about its center (the block
+  /// itself is drawn at its normal size, so its shader cache stays warm),
+  /// then the white flash and the paint glint on top.
+  void _paintDropBlock(
+    Canvas canvas,
+    Rect rect,
+    BlockColors colors,
+    DropFrame fx,
+    int row,
+    int col,
+  ) {
+    final i = DropFrame.indexOf(row, col);
+    final center = rect.center;
+    canvas.save();
+    canvas.translate(center.dx + fx.dx[i], center.dy + fx.dy[i]);
+    if (fx.scale[i] != 1.0) canvas.scale(fx.scale[i]);
+    canvas.translate(-center.dx, -center.dy);
+    paintBlock(canvas, rect, colors);
+
+    final rrect = RRect.fromRectAndRadius(
+      rect,
+      const Radius.circular(boardBlockRadius),
+    );
+    if (fx.flash[i] > 0) {
+      canvas.drawRRect(
+        rrect,
+        _fx..color = const Color(0xFFFFFFFF).withValues(alpha: fx.flash[i]),
+      );
+    }
+    final glint = fx.glint[i];
+    if (glint >= 0) _paintGlint(canvas, rect, rrect, glint);
+    canvas.restore();
+  }
+
+  /// A slanted white band sweeping left to right across one block.
+  void _paintGlint(Canvas canvas, Rect rect, RRect rrect, double t) {
+    final width = rect.width * glintWidthRatio;
+    final skew = rect.height * glintSlant / 2;
+    final x = rect.left - width + (rect.width + 2 * width) * t;
+    _glintPath
+      ..reset()
+      ..moveTo(x + skew, rect.top)
+      ..lineTo(x + width + skew, rect.top)
+      ..lineTo(x + width - skew, rect.bottom)
+      ..lineTo(x - skew, rect.bottom)
+      ..close();
+    // Brightest mid-sweep, faint at both ends.
+    final alpha = glintAlpha * math.sin(math.pi * t);
+    canvas.save();
+    canvas.clipRRect(rrect);
+    canvas.drawPath(
+      _glintPath,
+      _fx..color = const Color(0xFFFFFFFF).withValues(alpha: alpha),
+    );
+    canvas.restore();
   }
 
   void _paintGhost(Canvas canvas, GhostInfo g) {

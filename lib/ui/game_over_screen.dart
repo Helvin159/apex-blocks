@@ -103,12 +103,14 @@ class GameOverScreen extends StatelessWidget {
                     ],
                     _MenuButton(
                       label: 'NEW RACE',
+                      semanticLabel: 'New race. Start again from scratch',
                       color: theme.accent,
                       onTap: onNewRace,
                     ),
                     const SizedBox(height: 10),
                     _MenuButton(
                       label: 'GARAGE',
+                      semanticLabel: 'Garage. Back to the home screen',
                       color: theme.border,
                       textColor: theme.muted,
                       onTap: onGarage,
@@ -302,12 +304,16 @@ class _Stat extends StatelessWidget {
 
 class _MenuButton extends StatelessWidget {
   final String label;
+
+  /// What a screen reader says instead of the styled [label].
+  final String semanticLabel;
   final Color color;
   final Color? textColor;
   final VoidCallback onTap;
 
   const _MenuButton({
     required this.label,
+    required this.semanticLabel,
     required this.color,
     required this.onTap,
     this.textColor,
@@ -315,26 +321,32 @@ class _MenuButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: double.infinity,
-      height: _buttonHeight,
-      child: OutlinedButton(
-        style: OutlinedButton.styleFrom(
-          foregroundColor: textColor ?? color,
-          side: BorderSide(color: color, width: 2),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+    return Semantics(
+      button: true,
+      label: semanticLabel,
+      onTap: onTap,
+      excludeSemantics: true,
+      child: SizedBox(
+        width: double.infinity,
+        height: _buttonHeight,
+        child: OutlinedButton(
+          style: OutlinedButton.styleFrom(
+            foregroundColor: textColor ?? color,
+            side: BorderSide(color: color, width: 2),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
           ),
-        ),
-        onPressed: onTap,
-        child: Text(
-          label,
-          style: const TextStyle(
-            fontFamily: 'BarlowCondensed',
-            fontWeight: FontWeight.w800,
-            fontStyle: FontStyle.italic,
-            fontSize: 24,
-            letterSpacing: 1,
+          onPressed: onTap,
+          child: Text(
+            label,
+            style: const TextStyle(
+              fontFamily: 'BarlowCondensed',
+              fontWeight: FontWeight.w800,
+              fontStyle: FontStyle.italic,
+              fontSize: 24,
+              letterSpacing: 1,
+            ),
           ),
         ),
       ),
@@ -413,57 +425,65 @@ class PitStopButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: double.infinity,
-      height: 68,
-      child: FilledButton(
-        style: FilledButton.styleFrom(
-          backgroundColor: theme.highlight,
-          foregroundColor: const Color(0xFF1A1300),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+    return Semantics(
+      button: true,
+      enabled: onTap != null,
+      label: 'Pit stop. Watch an ad to get 3 pieces that fit',
+      onTap: onTap,
+      excludeSemantics: true,
+      child: SizedBox(
+        width: double.infinity,
+        height: 68,
+        child: FilledButton(
+          style: FilledButton.styleFrom(
+            backgroundColor: theme.highlight,
+            foregroundColor: const Color(0xFF1A1300),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
           ),
-        ),
-        onPressed: onTap,
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.play_circle_fill, size: 30),
-            const SizedBox(width: 10),
-            Flexible(
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'PIT STOP · FRESH TYRES',
-                      style: TextStyle(
-                        fontFamily: 'BarlowCondensed',
-                        fontWeight: FontWeight.w800,
-                        fontStyle: FontStyle.italic,
-                        fontSize: 24,
-                        height: 1,
-                        letterSpacing: 1,
+          onPressed: onTap,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.play_circle_fill, size: 30),
+              const SizedBox(width: 10),
+              Flexible(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'PIT STOP · FRESH TYRES',
+                        style: TextStyle(
+                          fontFamily: 'BarlowCondensed',
+                          fontWeight: FontWeight.w800,
+                          fontStyle: FontStyle.italic,
+                          fontSize: 24,
+                          height: 1,
+                          letterSpacing: 1,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      'Watch an ad, get 3 pieces that fit',
-                      style: TextStyle(
-                        fontFamily: 'Inter',
-                        fontVariations: const [FontVariation('wght', 600)],
-                        fontSize: 12,
-                        height: 1,
-                        color: const Color(0xFF1A1300).withValues(alpha: 0.75),
+                      const SizedBox(height: 3),
+                      Text(
+                        'Watch an ad, get 3 pieces that fit',
+                        style: TextStyle(
+                          fontFamily: 'Inter',
+                          fontVariations: const [FontVariation('wght', 600)],
+                          fontSize: 12,
+                          height: 1,
+                          color: const Color(0xFF1A1300)
+                              .withValues(alpha: 0.75),
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

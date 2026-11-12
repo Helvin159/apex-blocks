@@ -138,7 +138,9 @@ class AdsService extends ChangeNotifier {
   Future<void> start() async {
     final config = _config;
     if (config == null) return;
-    if (kDebugMode) debugPrint('Ads: ${config.modeLabel}');
+    // Logged in every build mode: RELEASE.md uses it to confirm a build is in
+    // REAL ads mode before it is submitted.
+    debugPrint('Ads: ${config.modeLabel}');
     if (!config.usable) {
       debugPrint('Ads: real IDs are still placeholders, ads stay off');
       return;

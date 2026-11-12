@@ -1,15 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:apexblocks/theme/themes.dart';
 import 'package:apexblocks/ui/board_geometry.dart';
 import 'package:apexblocks/ui/board_view.dart';
+import 'package:apexblocks/game/board.dart';
 import 'package:apexblocks/game/game_state.dart';
 import 'package:apexblocks/game/piece.dart';
 import 'package:apexblocks/services/ads_service.dart';
 import 'package:apexblocks/services/storage_service.dart';
 import 'package:apexblocks/ui/game_over_screen.dart';
 import 'package:apexblocks/ui/effects/clear_effects.dart';
+import 'package:apexblocks/ui/effects/particle_system.dart';
 import 'package:apexblocks/ui/game_screen.dart';
 import 'package:apexblocks/ui/tray_view.dart';
 
@@ -174,7 +177,7 @@ void main() {
 
   testWidgets('header: 44px menu button, score and pole boxes', (tester) async {
     await pumpScreen(tester, const Size(320, 568), prefs: {'bestScore': 900});
-    final menu = tester.getSize(find.byTooltip('Menu'));
+    final menu = tester.getSize(find.byTooltip('Pause'));
     expect(menu.width, greaterThanOrEqualTo(44));
     expect(menu.height, greaterThanOrEqualTo(44));
     expect(find.text('SCORE'), findsOneWidget);
@@ -189,7 +192,7 @@ void main() {
     await dragToBoardCenter(tester, 0);
     expect(scoreOf(tester), isNot('0'));
 
-    await tester.tap(find.byTooltip('Menu'));
+    await tester.tap(find.byTooltip('Pause'));
     await tester.pumpAndSettle();
     for (final label in ['RESUME', 'RESTART', 'GARAGE']) {
       final size = tester.getSize(
@@ -205,7 +208,7 @@ void main() {
     expect(find.text('RESUME'), findsNothing);
     expect(scoreOf(tester), isNot('0'));
 
-    await tester.tap(find.byTooltip('Menu'));
+    await tester.tap(find.byTooltip('Pause'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('RESTART'));
     await tester.pumpAndSettle();
@@ -231,7 +234,7 @@ void main() {
     );
     await tester.tap(find.text('go'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Menu'));
+    await tester.tap(find.byTooltip('Pause'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('GARAGE'));
     await tester.pumpAndSettle();
@@ -413,11 +416,144 @@ void main() {
     await tester.pump(const Duration(milliseconds: 50));
     expect(effects.isActive, isTrue);
 
-    await tester.tap(find.byTooltip('Menu'));
+    await tester.tap(find.byTooltip('Pause'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('RESTART'));
     await tester.pumpAndSettle();
     expect(effects.isActive, isFalse);
+  });
+
+  group('drop effects', () {
+    const size = Size(375, 667);
+
+    GameState bigPieceGame() => GameState(
+      board: Board(),
+      tray: [
+        family(PieceFamily.square3),
+        family(PieceFamily.single),
+        family(PieceFamily.square2),
+      ],
+    );
+
+    testWidgets('every drop plays, never blocks, and settles', (tester) async {
+      await pumpScreen(tester, size, newGame: bigPieceGame);
+      final effects = effectsOf(tester);
+      expect(effects.isActive, isFalse);
+
+      await dragToCell(tester, 0, 1, 1, settle: false); // 3×3: all effects
+      await tester.pump(const Duration(milliseconds: 40));
+      expect(effects.isActive, isTrue);
+      expect(effects.dropCount, 1);
+      final plan = effects.latestDropPlan!;
+      expect(
+        [plan.squash, plan.flash, plan.ring, plan.dust, plan.thump],
+        [true, true, true, true, true],
+      );
+      expect(effects.particles.activeCount, greaterThan(0));
+      expect(effects.scoreBump.value, greaterThanOrEqualTo(1));
+
+      // Mid-effect, the next drag works at once.
+      final before = int.parse(scoreOf(tester));
+      await dragToCell(tester, 1, 5, 5, settle: false);
+      expect(int.parse(scoreOf(tester)), greaterThan(before));
+
+      await tester.pumpAndSettle();
+      expect(effects.isActive, isFalse);
+      expect(effects.dropCount, 0);
+      expect(effects.thumpDy.value, 0);
+      expect(effects.scoreBump.value, 1);
+      expect(effects.particles.activeCount, 0);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('a single block gets no dust or thump', (tester) async {
+      await pumpScreen(tester, size, newGame: bigPieceGame);
+      final effects = effectsOf(tester);
+      await dragToCell(tester, 1, 4, 4, settle: false);
+      await tester.pump(const Duration(milliseconds: 40));
+      final plan = effects.latestDropPlan!;
+      expect(plan.ring && plan.pop, isTrue);
+      expect(plan.dust || plan.thump, isFalse);
+      expect(effects.particles.activeCount, 0);
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('dust stays inside the particle cap', (tester) async {
+      await pumpScreen(tester, size, newGame: bigPieceGame);
+      final effects = effectsOf(tester);
+      // Fill the shared pool, then drop a big piece.
+      for (var i = 0; i < maxParticles; i++) {
+        effects.particles.spawnSmoke(
+          x: 0,
+          y: 0,
+          vx: 0,
+          vy: 0,
+          life: 5,
+          size: 1,
+          growth: 0,
+          color: 0xFF888888,
+        );
+      }
+      await dragToCell(tester, 0, 1, 1, settle: false);
+      expect(effects.particles.activeCount, maxParticles);
+      effects.clear();
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('a clearing drop only squashes and flashes', (tester) async {
+      await pumpScreen(tester, size, newGame: oneLineFromClearing);
+      final effects = effectsOf(tester);
+      await dragToCell(tester, 0, 7, 7, settle: false);
+      await tester.pump(const Duration(milliseconds: 40));
+      final plan = effects.latestDropPlan;
+      // The single that completes the row is cleared with it, so no drop
+      // event remains for the cleared cell, or it is squash + flash only.
+      if (plan != null) {
+        expect(plan.squash && plan.flash, isTrue);
+        expect(
+          plan.ring || plan.glint || plan.pop || plan.dust || plan.thump,
+          isFalse,
+        );
+      }
+      await tester.pumpAndSettle();
+      expect(effects.isActive, isFalse);
+    });
+
+    testWidgets('reduced motion plays only the flash', (tester) async {
+      tester.platformDispatcher.accessibilityFeaturesTestValue =
+          const FakeAccessibilityFeatures(disableAnimations: true);
+      addTearDown(
+        tester.platformDispatcher.clearAccessibilityFeaturesTestValue,
+      );
+      await pumpScreen(tester, size, newGame: bigPieceGame);
+      final effects = effectsOf(tester);
+      await dragToCell(tester, 0, 1, 1, settle: false);
+      await tester.pump(const Duration(milliseconds: 40));
+      final plan = effects.latestDropPlan!;
+      expect(plan.flash, isTrue);
+      expect(
+        plan.squash || plan.glint || plan.pop || plan.dust || plan.thump,
+        isFalse,
+      );
+      expect(effects.particles.activeCount, 0);
+      expect(effects.thumpDy.value, 0);
+      expect(effects.scoreBump.value, 1);
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('restart clears a running drop effect', (tester) async {
+      await pumpScreen(tester, size, newGame: bigPieceGame);
+      final effects = effectsOf(tester);
+      await dragToCell(tester, 0, 1, 1, settle: false);
+      await tester.pump(const Duration(milliseconds: 40));
+      expect(effects.dropCount, 1);
+      await tester.tap(find.byTooltip('Pause'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('RESTART'));
+      await tester.pumpAndSettle();
+      expect(effects.isActive, isFalse);
+      expect(effects.dropCount, 0);
+    });
   });
 
   group('Pit Stop and ads', () {
@@ -438,6 +574,28 @@ void main() {
       expect(pitStopButton, findsOneWidget);
       expect(find.text('Watch an ad, get 3 pieces that fit'), findsOneWidget);
       expect(find.text('One pit stop per race'), findsOneWidget);
+    });
+
+    testWidgets('the flag buttons and the pause button have semantic labels', (
+      tester,
+    ) async {
+      final semantics = tester.ensureSemantics();
+      await pumpScreen(tester, size, newGame: nearlyDeadGame, ads: FakeAds());
+      expect(find.bySemanticsLabel('Pause'), findsOneWidget);
+      await reachFlag(tester);
+      for (final label in [
+        'Pit stop. Watch an ad to get 3 pieces that fit',
+        'New race. Start again from scratch',
+        'Garage. Back to the home screen',
+      ]) {
+        expect(find.bySemanticsLabel(label), findsOneWidget, reason: label);
+      }
+      final newRace = tester.getSemantics(
+        find.bySemanticsLabel('New race. Start again from scratch'),
+      );
+      expect(newRace.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
+      expect(newRace.getSemanticsData().flagsCollection.isButton, isTrue);
+      semantics.dispose();
     });
 
     for (final (label, ads) in [
@@ -549,7 +707,7 @@ void main() {
     ) async {
       final ads = FakeAds();
       await pumpScreen(tester, size, ads: ads);
-      await tester.tap(find.byTooltip('Menu'));
+      await tester.tap(find.byTooltip('Pause'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('RESTART'));
       await tester.pumpAndSettle();
